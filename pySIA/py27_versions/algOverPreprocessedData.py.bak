@@ -1,0 +1,244 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Dec  2 15:17:26 2015
+
+@author: phil
+"""
+
+import p_utils
+import string
+import os
+import h5py
+import numpy as np
+import p_algorithms
+from scipy import io
+import sys
+import re
+import itertools
+import pickle
+import theano.tensor as T
+import runAlgorithms
+
+def getFolder(dataFolder):
+    
+    
+    return
+    
+
+def runAlgOnOneFolder(dataFile,alg,algOptions):
+    
+    stim,resp = p_utils.getStrfData(dataFile)
+    resp = np.float64(resp)
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    if 'numLags' in algOptions:
+        numLags  = algOptions['numLags']
+    else:
+        numLags = [0]
+    
+    pyCodeLocation,SIALocation,DATAlocation = p_utils.getPaths()    
+    dataFolder = string.join((DATAlocation,dataFile),os.path.sep)
+    fileList = os.listdir(dataFolder)
+        
+
+    bestModel = dict()
+    bestModel['Vaf']= 0
+    bestModel['Lambda'] = []
+    bestModel['NLFit'] = []
+    for file in fileList:
+        print(file)
+        filePath = string.join((dataFolder,file),os.path.sep) 
+        try: 
+            with h5py.File(filePath,'r') as f:
+                if 'stimMoviePreProc' in f.keys():
+                    stimMoviePreProc = np.array(f['stimMoviePreProc'])
+                    
+                    X = p_utils.dataDelay(stimMoviePreProc,375,numLags)
+                    
+                    X_train = X[:estIdx,:]
+                    X_reg = X[estIdx:regIdx,:]
+
+                    y_train = resp[:estIdx]
+                    y_reg =resp[estIdx:regIdx]
+                    
+                    currModel = alg(X_train,y_train,X_reg,y_reg,algOptions)
+                    
+                    if currModel['Vaf']> bestModel['Vaf']:
+                        bestModel['Vaf']= currModel['Vaf']
+                        bestModel['Lambda'] = currModel['Lambda']
+                        bestModel['NLFit'] = currModel['NLFit']
+                        bestModel['Weights'] = currModel['Weights']
+                        bestModel['PreProcName'] = file                  
+                    
+                
+                    print(currModel['Vaf'])
+        except IOError:                
+                print('non-hdf5 files are not supported')
+                
+    
+    bestFile = bestModel['PreProcName']
+    bestFilePath=string.join((dataFolder,bestFile),os.path.sep) 
+    finalOptions=algOptions.copy()
+    finalOptions['lambdas'] = [bestModel['Lambda']]
+    with h5py.File(bestFilePath,'r') as f:
+        stimMoviePreProc = np.array(f['stimMoviePreProc'])
+        
+        X = p_utils.dataDelay(stimMoviePreProc,375,numLags)
+        X_train = X[:regIdx,:]
+        X_reg = X[regIdx:predIdx,:]
+
+        y_train = resp[:regIdx]
+        y_reg =resp[regIdx:predIdx]
+        
+        finalModel = alg(X_train,y_train,X_reg,y_reg,finalOptions)
+        finalModel['regModel'] = bestModel
+        finalModel['PreProcName']= bestModel['PreProcName']
+        print(finalModel['Vaf'])
+    return finalModel
+
+def goOverChannelScriptFolder(channelScriptFolder,alg,algOptions):
+    #calculates the best model for every neuron in given channelScript
+    pyCodeLocation,SIALocation,DATAlocation = p_utils.getPaths()
+    channelLocation = string.join((SIALocation,'channelScripts'),os.path.sep)
+    channelPath = string.join((channelLocation,channelScriptFolder),os.path.sep)
+    os.chdir(channelPath)
+    
+    fileList = os.listdir(os.getcwd())
+    resultList = []
+    
+    if 'Note' in algOptions:
+        
+        note  = '_'+ algOptions['Note']
+    else:
+        print 'No Note to add'
+        note = ''
+    
+    print 'entered ' + channelPath
+    print 'saving in: ' + channelScriptFolder + '_' + alg.func_name + note +'_results'
+    for file in fileList:
+        if file.find('.mat') != -1:
+            filePath = string.join((channelPath,file),os.path.sep) 
+            mat = io.loadmat(filePath)
+            if 'macroName' in mat.keys() and mat['macroName'][0] == 'a_movieClipALL':
+                mat = None
+                dataFile = file[:-4]#remove '.mat'
+                bestModel = runAlgOnOneFolder(dataFile,alg,algOptions)
+                resultList.append([dataFile,bestModel,bestModel['Vaf']])
+                io.savemat(channelScriptFolder + '_' + alg.func_name + note +'_results',{'rStruct':resultList})
+
+            mat = None
+                
+    return
+    
+def goOverAllNeuronStruct():
+    
+    pathStruct= p_utils.getPaths()
+
+
+    AllNeuronStructLocation = string.join((pathStruct['AllNeuronLocation'],'AllNeuronStruct.mat'),os.path.sep)
+    allNeuronStruct = io.loadmat(AllNeuronStructLocation)
+    neuronList = raw_input('Neuron List :')
+    areaList = raw_input('Area List :')
+    strfFile = raw_input('strf file :')
+    saveName = raw_input('save name :')
+    saveName = string.join((pathStruct['channelLocation'],saveName  + '.pkl'),os.path.sep)
+    neuronStruct = np.squeeze(allNeuronStruct['neuronStruct'])
+    
+##    
+#    nKernList = [1]
+#    filterSizeList = [4,7,10,13]
+##    filterSizeList = [6]
+#    poolSizeList = [1]
+##    poolSizeList = [2,3]
+#    poolSizeList = [1,2,3]
+##    midModeList = ['lambda x:x']
+#    midModeList = ['N/A']
+##    endModeList = ['lambda x:x','lambda x:T.nnet.relu(x)']
+#    endModeList = ['N/A']
+##    l1List = [ 0.0005,0.001,0.005,0.01] 
+#    l1List = [0.0,1.5,8.0]
+##    l1List = [0.001,0.1, 1.0, 10.0, 50.0,100.0] 
+##    l1List = [ 1.5] 
+#    l2List = [0.0]
+#    paramList = list(itertools.product(nKernList, filterSizeList,poolSizeList,midModeList,endModeList,l1List,l2List))
+#    
+    
+#
+    paramList = [[1,13,3,'lambda x:x','lambda x:x',1.5,0.0]]
+
+    
+    options = dict() 
+#    options['Batch_Size'] = 1875 #now the batch size is set by the algorithm
+#    options['Learning_Rate'] = 0.01
+#    options['N_Epochs'] = 15
+    options['Num_Frames'] =8
+#    options['L1'] = 0.05                               #TESTING
+#    options['L2'] = 0       
+    
+    options['initial_alpha'] = 0.5
+    options['fix_alpha'] = 0.0
+    options['Momentum'] = 0.00
+    options['Learning_Rate'] = 0.001
+    cropKern = 30
+
+    neuronDict = dict()
+    for neuron in neuronStruct:
+        neuronNameFull = str(neuron[0][0])
+        neuronAreaFull = str(neuron[1][0])
+        if (re.search(neuronList,neuronNameFull) is not None) and (re.search(areaList,neuronAreaFull) is not None):
+            print neuronNameFull
+
+            neuronName = neuronNameFull[:-4]
+            stim,resp = p_utils.getStrfData(strfFile,neuronName,cropKern)
+            bestVaf = 0
+            bestModel = dict()
+            neuronDict[neuronName] = []
+            for paramSet in paramList:
+                options['N_Kern'] = paramSet[0]
+                options['Filter_Size'] = paramSet[1]
+                options['Pool_Size'] = paramSet[2]
+                options['Mid_Activation_Mode'] = paramSet[3]
+                options['End_Activation_Mode'] = paramSet[4]
+                options['L1'] = paramSet[5]
+                options['L2'] = paramSet[6]
+                
+#                currResult = runAlgorithms.runConvNet(stim,resp,options,'given')
+#                currResult = runAlgorithms.runPhaseNeuralNet(stim,resp,options,'given')
+#                currResult = runAlgorithms.runSTARegression(stim,resp,options,'given')
+#                currResult = runAlgorithms.runAlphaNet(stim,resp,options,'given')
+#                currResult = runAlgorithms.runAlphaConvNet(stim,resp,options,'given')
+#                currResult = runAlgorithms.runPPAConvNet(stim,resp,options,'given')
+                currResult = runAlgorithms.runKConvNet(stim,resp,options,'given')
+#                currResult = runAlgorithms.runKRegression(stim,resp,options,'given')
+                
+                if currResult['noNLValidVaf'] > bestVaf:
+                    bestVaf = currResult['noNLValidVaf']
+                    bestModel = currResult
+                if currResult['validVaf'] > bestVaf:
+                    bestVaf = currResult['validVaf']
+                    bestModel = currResult
+                    
+                    
+                neuronDict[neuronName].append(currResult)
+                    
+#            neuronDict[neuronName] = bestModel
+            pickle.dump(neuronDict,open(saveName,'w'))
+    
+    return
+if __name__ == '__main__':
+#    #for channel scripts
+#    channelFolder  = sys.argv[1]
+#    options =dict()
+#    options['numLags']= range(8)
+#    options['lambdas'] = [0,1e-3,1e-2]
+#    if len(sys.argv) >2:
+#        options['Note'] = sys.argv[2]
+#    result = goOverChannelScriptFolder(channelFolder,p_algorithms.lassoWithDelay,options)
+#        
+#    #for a single data folder
+#    options =dict()
+#    options['numLags']= range(1)
+#    options['lambdas'] = [0,1e-3,1e-2]
+#    runAlgOnOneFolder('pSimple',p_algorithms.lassoWithDelay,options)
+    goOverAllNeuronStruct()
+    

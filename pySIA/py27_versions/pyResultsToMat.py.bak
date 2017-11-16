@@ -1,0 +1,146 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Mar  8 12:20:40 2016
+
+@author: phil
+"""
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
+import pickle
+import scipy.io as io
+from pySIA import p_utils
+import matplotlib.pyplot as plt
+import numpy as np
+
+def fromChannelFolder():
+    paths = p_utils.getPaths()
+    resultFile = raw_input('result file :')
+    os.chdir(paths['channelLocation'])
+    resultDict = pickle.load(open(resultFile+'.pkl','r'))
+    newMatFileName  = raw_input('new mat file name :')
+    
+    
+    matDict = dict()
+    
+    neuronIdx = 1
+#    neuron = resultDict[resultDict.keys()[0]]
+#    p_utils.plotReconstruction(neuron['mapWeights'],neuron['filterWeights'])
+#    aa = resultDict[resultDict.keys()[0]]
+#    vafReader(aa)
+    for neuronName in resultDict:
+        neuronData = resultDict[neuronName]
+        neuronFieldName = newMatFileName + str(neuronIdx)
+        
+        matDict[neuronFieldName] = neuronData
+        matDict[neuronFieldName]['neuronName'] = neuronName
+        neuronIdx = neuronIdx + 1
+    
+    if len(newMatFileName) > 0:         
+        io.savemat(newMatFileName+'.mat',matDict)
+    return
+    
+def fromChannelFolderAsList():
+    paths = p_utils.getPaths()
+    resultFile = raw_input('result file :')
+    os.chdir(paths['channelLocation'])
+    resultDict = pickle.load(open(resultFile+'.pkl','r'))
+    newMatFileName  = raw_input('new mat file name :')
+    
+    
+    matDict = dict()
+    
+    neuronIdx = 1
+    nameDict = []
+    neuronMatrix = []
+    neuronMatrix = np.array([])
+    for neuronName in resultDict:        
+        nameDict.append(neuronName)
+        neuronData = vafReader(resultDict[neuronName])
+        neuronMatrix = np.nan_to_num(np.dstack((neuronMatrix, neuronData)) if neuronMatrix.size else neuronData)
+#    neuron = resultDict[resultDict.keys()[0]]
+#    p_utils.plotReconstruction(neuron['mapWeights'],neuron['filterWeights'])
+#    aa = resultDict[resultDict.keys()[0]]
+#    vafReader(aa)
+    for neuronName in resultDict:
+        neuronList = resultDict[neuronName]
+        bestVaf = 0
+        for neuronTrial in neuronList:           
+            if neuronTrial['validVaf']>bestVaf:
+                neuronData = neuronTrial
+                bestVaf = neuronTrial['validVaf']
+            elif neuronTrial['noNLValidVaf']>bestVaf:
+                neuronData = neuronTrial
+                bestVaf = neuronTrial['noNLValidVaf']
+        neuronFieldName = newMatFileName + str(neuronIdx)
+            
+        matDict[neuronFieldName] = neuronData
+        matDict[neuronFieldName]['neuronName'] = neuronName
+        neuronIdx = neuronIdx + 1
+    
+    if len(newMatFileName) > 0:         
+        io.savemat(newMatFileName+'.mat',matDict)
+        save_neuronMatrix = raw_input('save Neuron Matrix? :')
+        if save_neuronMatrix == '1':
+            neuronMatrixDict = dict()
+            neuronMatrixDict['neuronMatrix'] =neuronMatrix
+            io.savemat(newMatFileName+'_neuronMatrix.mat',neuronMatrixDict)
+    return
+def fromResultFolder():
+    
+    resultFile = raw_input('result file :')
+    os.chdir('/media/phil/52301BCA301BB3C7/Data/Results/resultStructFiles')
+    resultDict = pickle.load(open(resultFile+'.pkl','r'))
+    
+    newMatFileName  = raw_input('new mat file name :')
+    
+    
+    matDict = dict()
+    
+    neuronIdx = 1
+#    neuron = resultDict[resultDict.keys()[0]]
+#    p_utils.plotReconstruction(neuron['mapWeights'],neuron['filterWeights'])
+    for neuronName in resultDict:
+        neuronData = resultDict[neuronName]
+        neuronFieldName = newMatFileName + str(neuronIdx)
+        
+        matDict[neuronFieldName] = neuronData
+        matDict[neuronFieldName]['neuronName'] = neuronName
+        neuronIdx = neuronIdx + 1
+        
+    if len(newMatFileName) > 0:         
+        io.savemat(newMatFileName+'.mat',matDict)
+    return
+    
+def vafReader(neuronList):
+    #custom function, will not be used
+    vafMatrix = np.zeros((len(neuronList),12))
+    neuronIdx = 0
+    for trial in neuronList:
+        
+        vafMatrix[neuronIdx,0] = trial['validVaf']
+        vafMatrix[neuronIdx,1] = trial['predVaf']
+        vafMatrix[neuronIdx,2] = trial['noNLValidVaf']
+        vafMatrix[neuronIdx,3] = trial['noNLPredVaf']
+#        vafMatrix[neuronIdx,4] = trial['validVafREV']
+#        vafMatrix[neuronIdx,5] = trial['predVafREV']
+        vafMatrix[neuronIdx,6] = trial['alpha']
+        vafMatrix[neuronIdx,7] = trial['p_opt'][0]
+        vafMatrix[neuronIdx,8] = trial['p_opt'][1]
+        vafMatrix[neuronIdx,9] = trial['options']['Filter_Size']
+        vafMatrix[neuronIdx,10] = trial['options']['Pool_Size']
+        vafMatrix[neuronIdx,11] = trial['options']['L1']
+        
+        neuronIdx = neuronIdx  +1
+    
+    return vafMatrix
+
+if __name__ == '__main__':
+    mode = raw_input('mode :')
+    if mode =='1':
+        fromChannelFolder()
+    elif mode == '2':
+       fromResultFolder()
+    elif mode =='3':
+       fromChannelFolderAsList()
+    

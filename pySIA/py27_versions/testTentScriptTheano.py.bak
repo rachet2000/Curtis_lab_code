@@ -1,0 +1,276 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue Feb 23 19:45:16 2016
+
+@author: phil
+"""
+import theano
+import numpy as np
+import theano.tensor as T
+import matplotlib.pyplot as plt
+
+def LSE(x,y):
+    #mean square error
+    return (T.mean((x.T-y)**2))
+def getTentBasis(x,inputRange,numTents):
+    #returns x in the basis space    
+    
+    #sets up the centers for every tent function
+    space = np.linspace(-inputRange,inputRange,num=2*numTents+1)
+    #scale tents such that each point on the number line is covered by only 2 tents
+    scale = float(inputRange)/float(numTents) 
+    
+    #change x into tent function space
+    tentFunctionsList = [np.maximum(0,1 - np.abs((x - spot)/scale)) for spot in space]
+    tentFunctionsMatrix = np.transpose(np.asarray(tentFunctionsList))
+    return tentFunctionsMatrix
+def load_shared_data(data_set):
+    import theano
+    #puts the data onto the gpu
+    shared_set = theano.shared(np.asarray(data_set,
+                                               dtype=theano.config.floatX),borrow=True)
+    return shared_set
+class tentLayer(object):
+    #hidden layer with weights for each tent 
+    def __init__(self,input,numTents,inputRange,fitIntercept = True):
+        self.input = input
+        #scale tents such that each point on the number line is covered by only 2 tents
+        self.scale = float(inputRange)/float(numTents)
+        #sets up the centers for every tent function
+        space = np.linspace(-inputRange,inputRange,num=2*numTents+1)
+        self.space = space
+        
+        #create model parameters
+        self.W = theano.shared(
+#            np.asarray(space,dtype=theano.config.floatX),
+            np.asarray(np.random.uniform(size=np.size(space)),dtype=theano.config.floatX),
+            borrow=True
+        )
+        b_values = np.zeros(1, dtype=theano.config.floatX)
+        self.b = theano.shared(value=b_values, borrow=True)
+        
+        
+        #theano version of creating the tent basis
+        self.extendedMatrix=T.stack([T.maximum(0,1 - T.abs_((input - spot)/self.scale)) for spot in space],axis=1)
+        
+        #output is linear in the tent basis space
+        lin_output = T.dot(self.extendedMatrix,self.W)
+        self.output = lin_output + self.b.dimshuffle('x', 0, 'x', 'x')        
+
+        if fitIntercept:
+            self.params = [self.W,self.b]
+        else:
+            self.params = [self.W]
+        
+        
+def main():
+    plt.close("all")
+
+    numInputs = 10000 #number of examples
+    inputRange = 10   # tents will range from [-inputRange to inputRange]
+    numTents = 7    #will actually give you (2*numTents + 1) tents
+    badRange = float(inputRange)/float(numTents)
+    noiseLevel =1
+    
+    
+    #generate Input
+#    inputMatrix = np.linspace(-(inputRange),(inputRange),num=(numInputs))
+
+    inputMatrix = np.random.uniform(low=-(inputRange-badRange),high=(inputRange-badRange),size=(numInputs,))
+#    inputMatrix = np.random.uniform(low=-(inputRange),high=(inputRange),size=(numInputs,))
+
+    #generate output and given nonlinearity
+    noise = (np.random.normal(loc=0,scale=noiseLevel,size = (numInputs,)) +1) #multiplicative noise
+#    noise = 1
+    
+
+    cleanOutput = np.square(np.maximum(0,inputMatrix)) 
+#    cleanOutput = np.sqrt(np.maximum(0,inputMatrix)) 
+#    cleanOutput = np.square(inputMatrix)
+#    cleanOutput = inputMatrix
+#    cleanOutput =np.sqrt(np.maximum(0,inputMatrix)) 
+    
+    output = noise*cleanOutput
+
+    #Seperate the training, regularization and test set
+    estIdx =(3.0/5.0)*numInputs
+    regIdx  = (4.0/5.0)*numInputs
+    predIdx = numInputs
+    
+    X_train = inputMatrix[:estIdx]
+    X_valid = inputMatrix[estIdx:regIdx]
+    X_test = inputMatrix[regIdx:predIdx]
+    y_train = output[:estIdx]
+    y_valid =output[estIdx:regIdx]
+    y_test = output[regIdx:predIdx]
+    
+    
+    
+    
+    
+    
+    
+    #SECTION USING  SCI-KIT LEARN
+    
+    tentFunctionsMatrix = getTentBasis(X_train,inputRange,numTents)
+    
+    from sklearn import linear_model
+    clf = linear_model.Ridge (alpha = 1)
+    clf.fit(tentFunctionsMatrix,y_train)
+    
+    #plot the function transformation by feeding the number line as input 
+    plt.figure()
+    plt.title('SCI-KIT Function Transformation')
+    #remove the regions at the ends which are covered by the first and last half-tents
+    linSpaceNP = np.linspace(-(inputRange),(inputRange),num=numInputs)
+    numberLine = getTentBasis(linSpaceNP,inputRange,numTents)
+    numberLineOutput = clf.predict(numberLine)
+    plt.plot(linSpaceNP,numberLineOutput)
+    
+    #plot the sck-kit tent functions
+    plt.figure()
+    plt.title('SCI-KIT Tent Functions')
+    plt.plot(linSpaceNP,numberLine)
+    
+    
+    # SECTION USING THEANO
+    
+    #set up some hyperparameters
+    batch_size = 200
+    learning_rate = 0.01
+    L2 = 1e-3
+    numEpochs = 10
+    fitB = False  #fitting B leads to large bias (regions that should be 0 are not) 
+    
+    
+    #load the variables
+    train_set_x = load_shared_data(X_train)
+    valid_set_x = load_shared_data(X_valid)
+    test_set_x= load_shared_data(X_test)
+    
+    train_set_y= T.cast(load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    
+    index = T.lscalar()
+    x = T.fvector('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    
+    
+    #create the model    
+    layer0 = tentLayer(input=x,numTents=numTents,inputRange = inputRange,fitIntercept = fitB)
+    
+    #model functions
+    params =  layer0.params
+    cost = LSE(layer0.output.T,y) + L2*(T.sum(layer0.W**2))
+    grads = T.grad(cost, params)
+    
+    updates = [
+        (param_i, param_i - learning_rate * grad_i)
+        for param_i, grad_i in zip(params, grads)
+    ]
+
+    train_model = theano.function(
+        [index],
+        cost,
+        updates=updates,
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    test_model = theano.function(
+        [index],
+        LSE(layer0.output,y) ,
+        givens={
+            x: test_set_x[index * batch_size: (index + 1) * batch_size],
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+    validate_model = theano.function(
+        [index],
+        LSE(layer0.output,y),
+        givens={
+            x: valid_set_x[index * batch_size: (index + 1) * batch_size],
+            y: valid_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+    #train the model
+    best_validation_loss = np.inf
+    for epoch in range(numEpochs):
+        for minibatch_index in xrange(n_train_batches):
+            cost_ij = train_model(minibatch_index)
+            validation_losses = [validate_model(i) for i
+                     in xrange(n_valid_batches)]
+            this_validation_loss = np.mean(validation_losses)
+            print('epoch %i, minibatch %i/%i, validation score %f ' %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss))
+            if this_validation_loss < best_validation_loss:
+                best_validation_loss = this_validation_loss
+                
+                test_losses = [test_model(i) for i in xrange(n_test_batches)]
+
+
+                test_score = np.mean(test_losses)
+                print(('     epoch %i, minibatch %i/%i, test score of '
+                       'best model %f ') %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       test_score ))
+
+                       
+   #plot stuff
+   #plot the weights of the tents
+    plt.figure()
+    plt.title('THEANO Tent Weights')
+    plt.plot(layer0.space,layer0.W.get_value())
+    
+   #plot function transformation by feeding the number line as input 
+    plt.figure()
+    plt.title('THEANO function transformation')
+    linearInput = np.linspace(-(inputRange),(inputRange),num=(numInputs))
+    linearInputGPU = load_shared_data(linearInput)
+    get_test_output =theano.function(
+        [index],
+        [layer0.output],        
+        givens={
+            x: linearInputGPU[index * batch_size: (index + 1) * batch_size]
+        }
+    )   
+
+    bb=  [np.squeeze(get_test_output(i)) for i in xrange(numInputs/batch_size)] 
+    plt.plot(linearInput,np.concatenate(bb))
+    
+    #plot the tents 
+    plt.figure()
+    plt.title('THEANO tent functions')
+    get_extendedMatrix =theano.function(
+        [index],
+        [layer0.extendedMatrix],        
+        givens={
+            x: linearInputGPU[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    bb=  np.concatenate([np.squeeze(get_extendedMatrix(i)) for i in xrange(numInputs/batch_size)])
+    plt.plot(linearInput,bb)
+
+
+    return
+      
+
+if __name__ == "__main__":
+    main()
+    

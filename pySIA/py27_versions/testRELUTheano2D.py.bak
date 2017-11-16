@@ -1,0 +1,233 @@
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
+import theano
+import numpy as np
+import theano.tensor as T
+import matplotlib.pyplot as plt
+
+import p_utils
+import p_layers
+from deepnn.costs import LSE
+import t_utils
+from theano.tensor.shared_randomstreams import RandomStreams
+theano.config.optimizer='fast_compile'
+theano.config.exception_verbosity='high'
+theano.config.compute_test_value = 'warn'
+
+def main():
+    print 'main'
+    plt.close("all")
+    rng = np.random.RandomState(23455)
+    theano_rng = RandomStreams(rng.randint(666))
+    numInputs = 15000
+    inputRange = 10
+    numTents = 7
+    badRange = float(inputRange)/float(numTents)
+    noiseLevel =0.1
+    filterSize = 10
+    stimLen = filterSize*filterSize
+    
+    #create neuron receptive field
+    strf_square = np.random.randn(filterSize,filterSize)
+    strf_lin = np.reshape(strf_square,(stimLen,))
+#    strf_lin[1:] =0
+#    strf_lin[0] = 1
+    #generate Input
+#    inputMatrix = np.linspace(-(inputRange),(inputRange),num=(numInputs))
+
+    inputMatrix = np.random.uniform(low=-(inputRange-2*badRange),high=(inputRange-2*badRange),size=(numInputs,filterSize,filterSize))
+#    inputMatrix = np.random.uniform(low=-(inputRange),high=(inputRange),size=(numInputs,))
+    
+    
+    #get linear response
+    lin_response = np.dot(np.reshape(inputMatrix,(numInputs,stimLen)),strf_lin)
+    
+    
+    #generate non-linearity
+    subunitNL = np.abs(lin_response)
+#    subunitNL = np.maximum(0,lin_response)
+#    subunitNL = (lin_response)
+    
+    cleanOutput = subunitNL
+    #generate noise
+#    noise = (np.random.normal(loc=0,scale=noiseLevel,size =(numInputs) )+1) #multiplicative noise
+    noise = 1
+    
+    
+
+    output = np.multiply(noise,cleanOutput)
+
+    #Seperate the training, regularization and test set
+    estIdx =(3.0/5.0)*numInputs
+    regIdx  = (4.0/5.0)*numInputs
+    predIdx = numInputs
+    
+    X_train = inputMatrix[:estIdx,:,:]
+    X_valid = inputMatrix[estIdx:regIdx,:,:]
+    X_test = inputMatrix[regIdx:predIdx,:,:]
+    y_train = output[:estIdx]
+    y_valid =output[estIdx:regIdx]
+    y_test = output[regIdx:predIdx]
+    
+    
+    
+    
+    
+    
+    
+    #SECTION USING  SCI-KIT LEARN
+    '''we can't derive the 2d gradient using sci-kit learn /I don't want to'''
+#    
+#    tentFunctionsMatrix = getTentBasis(X_train,inputRange,numTents)
+#    
+#    from sklearn import linear_model
+#    clf = linear_model.Ridge (alpha = 1)
+#    clf.fit(tentFunctionsMatrix,y_train)
+#    
+#    #plot the function transformation by feeding the number line as input 
+#    plt.figure()
+#    plt.title('SCI-KIT Function Transformation')
+#    #remove the regions at the ends which are covered by the first and last half-tents
+#    linSpaceNP = np.linspace(-(inputRange),(inputRange),num=numInputs)
+#    numberLine = getTentBasis(linSpaceNP,inputRange,numTents)
+#    numberLineOutput = clf.predict(numberLine)
+#    plt.plot(linSpaceNP,numberLineOutput)
+#    
+#    #plot the sck-kit tent functions
+#    plt.figure()
+#    plt.title('SCI-KIT Tent Functions')
+#    plt.plot(linSpaceNP,numberLine)
+    
+    
+    # SECTION USING THEANO
+    
+    #set up some hyperparameters
+    print 'setting up hyperparameters'
+    batch_size = 200
+    learning_rate = 0.001
+    L2 = 0.00
+    numEpochs = 20
+
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    
+    index = T.lscalar()
+    x = T.tensor3('x')  # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    x.tag.test_value = X_train.astype('float32')[0:375]
+    y.tag.test_value = y_train.astype('float32')[0:375]
+    ourFunctions = t_utils.tFunctions(x,y,index,batch_size,n_train_batches,n_valid_batches,n_test_batches)
+    
+    alpha = theano.shared(np.asarray(0.0,dtype=theano.config.floatX),borrow=True)
+#    beta = theano.shared(np.asarray(0.0,dtype=theano.config.floatX),borrow=True)
+    
+    W_values = np.asarray(rng.uniform(
+    low=-np.sqrt(6e-15/ (stimLen + 1)),
+    high=np.sqrt(6e-15 / (stimLen + 1)),
+    size=(stimLen, 1)), dtype=theano.config.floatX)
+    W = theano.shared(value=W_values, name='W', borrow=True)
+
+    layer0 =p_layers.HiddenLayer(
+        rng,
+        theano_rng,
+        input=x.flatten(2),
+        n_in = stimLen,
+        n_out = 1,
+        W=W,
+        activation = lambda x: T.nnet.relu(x,alpha=alpha)
+
+    )
+    
+    
+    summedOutput = layer0.output
+    
+    
+    params =  layer0.params  +[alpha]
+    cost = LSE(summedOutput,y) 
+#    cost = LSE(summedOutput,y)
+    grads = T.grad(cost, params)
+    
+    updates = [
+        (param_i, param_i - learning_rate * grad_i)
+        for param_i, grad_i in zip(params, grads)
+    ]
+#        updates = [
+#        (param_i, param_i - learning_rate * grad_i)
+#        for param_i, grad_i in zip(params, grads)
+#    ]
+    
+#    aa = layer0.W.get_value()
+#    plt.plot(layer0.space,aa)
+    train_model = theano.function(
+        [index],
+        cost,
+        updates=updates,
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size,:,:],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    
+    
+    validate_model = ourFunctions.createXYFunc(LSE(summedOutput,y),valid_set_x,valid_set_y)
+    test_model = ourFunctions.createXYFunc(LSE(summedOutput,y),test_set_x,test_set_y)
+
+    best_validation_loss = np.inf
+    for epoch in range(numEpochs):
+        for minibatch_index in xrange(n_train_batches):
+            cost_ij = train_model(minibatch_index)
+            validation_losses = [validate_model(i) for i
+                     in xrange(n_valid_batches)]
+            this_validation_loss = np.mean(validation_losses)
+            print('epoch %i, minibatch %i/%i, validation score %f ' %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss))
+            if this_validation_loss < best_validation_loss:
+                best_validation_loss = this_validation_loss
+                
+                test_losses = [test_model(i) for i in xrange(n_test_batches)]
+
+
+                test_score = np.mean(test_losses)
+                print(('     epoch %i, minibatch %i/%i, test score of '
+                       'best model %f ') %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       test_score ))
+
+                       
+    print alpha.get_value()
+    estSTRF = np.reshape(layer0.W.get_value(),(filterSize,filterSize))
+    plt.pcolor(estSTRF)
+    plt.figure()
+    plt.pcolor(strf_square)
+    
+#    get_lin_output = ourFunctions.createXFunc(layer0.lin_output,linearInputGPU)
+#    get_vectorOutput = ourFunctions.createXFunc(layer0.vectorOutput,linearInputGPU)
+#    dd=  np.concatenate([np.squeeze(get_lin_output(i)) for i in xrange(numInputs/batch_size)])
+#    dd = dd[np.arange(0,np.size(bb,0),np.square(filterSize))]
+#    ee=  np.concatenate([np.squeeze(get_vectorOutput(i)) for i in xrange(numInputs/batch_size)])
+#    ee = ee[np.arange(0,np.size(bb,0),np.square(filterSize))]
+    
+    return
+      
+
+if __name__ == "__main__":
+    main()
+    

@@ -1,0 +1,207 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Mar  7 23:30:18 2016
+
+@author: phil
+"""
+
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Feb 25 15:52:47 2016
+
+@author: phil
+"""
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
+import theano
+import numpy as np
+import theano.tensor as T
+import matplotlib.pyplot as plt
+
+import p_utils
+import p_layers
+from deepnn.costs import LSE
+import t_utils
+
+theano.config.optimizer='fast_compile'
+theano.config.exception_verbosity='high'
+theano.config.compute_test_value = 'warn'
+from theano.tensor.shared_randomstreams import RandomStreams
+
+
+def main():
+    plt.close("all")
+
+    numInputs = 15000
+    inputRange = 10
+    numTents = 7
+    badRange = float(inputRange)/float(numTents)
+    noiseLevel =0.1
+    filterSize = 10
+    #generate Input
+#    inputMatrix = np.linspace(-(inputRange),(inputRange),num=(numInputs))
+
+    inputMatrix = np.random.uniform(low=-(inputRange-2*badRange),high=(inputRange-2*badRange),size=(numInputs,filterSize,filterSize))
+#    inputMatrix = np.random.uniform(low=-(inputRange),high=(inputRange),size=(numInputs,))
+
+    #generate non-linearity
+#    noise = (np.random.normal(loc=0,scale=noiseLevel,size =(numInputs) )+1) #multiplicative noise
+    noise = 1
+    cleanOutput = np.sum(np.square(np.maximum(0,inputMatrix)),axis=(1,2))
+    aa = inputMatrix[:,0:3,0:3]
+    bb = np.square(aa)
+    cleanOutput = np.sum(bb,axis=(1,2))
+    output = np.multiply(noise,cleanOutput)
+
+    #Seperate the training, regularization and test set
+    estIdx =(3.0/5.0)*numInputs
+    regIdx  = (4.0/5.0)*numInputs
+    predIdx = numInputs
+    
+    X_train = inputMatrix[:estIdx,:,:]
+    X_valid = inputMatrix[estIdx:regIdx,:,:]
+    X_test = inputMatrix[regIdx:predIdx,:,:]
+    y_train = output[:estIdx]
+    y_valid =output[estIdx:regIdx]
+    y_test = output[regIdx:predIdx]
+    
+    
+    
+    
+    
+
+    # SECTION USING THEANO
+    
+    #set up some hyperparameters
+    batch_size = 200
+    learning_rate = 0.001
+    L2 = 0.00
+    numEpochs = 200
+
+    rng = np.random.RandomState(666)
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    
+    index = T.lscalar()
+    x = T.tensor3('x')  # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    x.tag.test_value = X_train.astype('float32')[0:375]
+    y.tag.test_value = y_train.astype('float32')[0:375]
+    theano_rng = RandomStreams(rng.randint(666))
+
+    ourFunctions = t_utils.tFunctions(x,y,index,batch_size,n_train_batches,n_valid_batches,n_test_batches)
+    
+    stimLen = int(np.square(filterSize))
+    
+    layer0_input = x.flatten(2)
+    numFilts = 2    
+    layer0 = [None] * numFilts
+    for filt in range(numFilts):
+        layer0[filt] =p_layers.HiddenLayer(
+            rng,
+            theano_rng,
+            input=layer0_input,
+            n_in = stimLen,
+            n_out = 1,
+            activation = lambda x:T.nnet.softplus(x)
+
+        )
+        
+    
+#    layer0 =p_layers.HiddenLayer(
+#            rng,
+#            theano_rng,
+#            input=layer0_input,
+#            n_in = stimLen,
+#            n_out = 1,
+#            activation = lambda x:T.nnet.softplus(x)
+#
+#        )
+#    validate_model = ourFunctions.createXYFunc(LSE(layer0.output,y),valid_set_x)
+    
+    
+#    summedOutput = T.sum([layer0[filt].output for filt in range(numFilts)],axis=(0))
+    
+    layer0_drop_input = T.concatenate([layer0[filt].output for filt in range(numFilts)],axis=(1))
+    layer0_drop = p_layers.DropoutLayer(rng,layer0_drop_input,0.5)
+    
+    summedMaskOutput = T.sum(layer0_drop.maskOutput,axis=(1))
+    summedCleanOutput = T.sum(layer0_drop.output,axis=(1))
+    
+    params =  []
+    for filt in range(numFilts):
+        params = params+ layer0[filt].params
+        
+    cost = LSE(summedMaskOutput,y)
+
+    grads = T.grad(cost, params)
+    
+    updates = [
+        (param_i, param_i - learning_rate * grad_i)
+        for param_i, grad_i in zip(params, grads)
+    ]
+#    aa = layer0.W.get_value()
+#    plt.plot(layer0.space,aa)
+    train_model = theano.function(
+        [index],
+        cost,
+        updates=updates,
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size,:,:],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    
+    
+    validate_model = ourFunctions.createXYFunc(LSE(summedCleanOutput,y),valid_set_x,valid_set_y)
+    test_model = ourFunctions.createXYFunc(LSE(summedCleanOutput,y),test_set_x,test_set_y)
+
+    best_validation_loss = np.inf
+    for epoch in range(numEpochs):
+        for minibatch_index in xrange(n_train_batches):
+            cost_ij = train_model(minibatch_index)
+            validation_losses = [validate_model(i) for i
+                     in xrange(n_valid_batches)]
+            this_validation_loss = np.mean(validation_losses)
+            print('epoch %i, minibatch %i/%i, validation score %f ' %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss))
+            if this_validation_loss < best_validation_loss:
+                best_validation_loss = this_validation_loss
+                
+                test_losses = [test_model(i) for i in xrange(n_test_batches)]
+
+
+                test_score = np.mean(test_losses)
+                print(('     epoch %i, minibatch %i/%i, test score of '
+                       'best model %f ') %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       test_score ))
+
+                       
+    for layer in [layer0]:
+        return
+    return
+      
+
+if __name__ == "__main__":
+    main()
+    

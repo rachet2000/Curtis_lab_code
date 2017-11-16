@@ -1,0 +1,1677 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Dec 23 12:31:55 2015
+
+@author: phil
+"""
+
+
+#def convNetStack(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+#
+#    from DeepLearningTutorials.convolutional_mlp import LeNetConvPoolLayer
+#    from DeepLearningTutorials.mlp import HiddenLayer
+#    from deepnn.costs import LSE
+#    import theano.tensor as T
+#    import timeit
+#    import t_utils
+#    import p_layers
+#    if 'Batch_Size' in options:
+#        batch_size  = options['Batch_Size']
+#    else:
+#        batch_size = 200
+#    if 'N_Kern' in options:
+#        n_kern  = options['N_Kern']
+#    else:
+#        n_kern = 1
+#    if 'Learning_Rate' in options:
+#        learning_rate  = options['Learning_Rate']
+#    else:
+#        learning_rate = 0.1   
+#    if 'N_Epochs' in options:
+#        n_epochs  = options['N_Epochs']
+#    else:
+#        n_epochs = 150
+#    if 'Filter_Size' in options:
+#        filter_size = options['Filter_Size']
+#    else:
+#        filter_size = 12  
+#    if 'Pool_Size' in options:
+#        pool_size = options['Pool_Size']
+#    else:
+#        pool_size = 2
+#        
+#    rng = np.random.RandomState(23455)
+#    
+#    
+#    train_set_x = p_utils.load_shared_data(X_train)
+#    valid_set_x = p_utils.load_shared_data(X_valid)
+#    test_set_x= p_utils.load_shared_data(X_test)
+#    
+#    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+#    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+#    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+#    
+#    
+#    
+#    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+#    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+#    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+#    n_train_batches /= batch_size
+#    n_test_batches /= batch_size
+#    n_valid_batches /= batch_size
+#    # allocate symbolic variables for the data
+#    index = T.lscalar()  # index to a [mini]batch
+#
+#    # start-snippet-1
+#    x = T.tensor3('x')   # the data is presented as rasterized images
+#    y = T.fvector('y')  # the labels are presented as 1D vector of
+#                        # [int] labels
+#
+#    print '... building the model'
+#    numFrames = np.shape(X_train)[1]
+#    layer0_input =  x.reshape((batch_size, numFrames, 30, 30))
+#    
+#    
+#    layer0 =p_layers.p_convPoolLayer(
+#        rng,
+#        input=layer0_input,
+#        image_shape=(batch_size, numFrames,  30, 30),
+#        filter_shape=(n_kern, numFrames, filter_size, filter_size),
+#        poolsize=(pool_size, pool_size)
+#    )
+#    
+#    
+##        layer2_input = layer2_input + layer0[frame].output.flatten(2)   
+#    layer2_input = layer0.output.flatten(2) 
+#    mapSize =  (30 -filter_size + 1)/ pool_size
+#    layer2 = HiddenLayer(
+#        rng,
+#        input=layer2_input,
+#        n_in=n_kern * mapSize* mapSize,
+#        n_out = 1,
+#        activation=lambda t: T.maximum(0,t)
+#    )
+#    
+#    cost = LSE(layer2.output,y) 
+#    
+#    
+#    test_model = theano.function(
+#        [index],
+#        LSE(layer2.output,y) ,
+#        givens={
+#            x: test_set_x[index * batch_size: (index + 1) * batch_size],
+#            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+#        }
+#    )
+#
+#    validate_model = theano.function(
+#        [index],
+#        LSE(layer2.output,y),
+#        givens={
+#            x: valid_set_x[index * batch_size: (index + 1) * batch_size],
+#            y: valid_set_y[index * batch_size: (index + 1) * batch_size]
+#        }
+#    )
+#    
+#    params =  layer2.params + layer0.params
+#
+#    grads = T.grad(cost, params)
+#    
+#    
+#    updates = [
+#        (param_i, param_i - learning_rate * grad_i)
+#        for param_i, grad_i in zip(params, grads)
+#    ]
+#
+#    train_model = theano.function(
+#        [index],
+#        cost,
+#        updates=updates,
+#        givens={
+#            x: train_set_x[index * batch_size: (index + 1) * batch_size],
+#            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+#        }
+#    )
+#    
+#    get_train_output =theano.function(
+#        [index],
+#        [layer2.output,y],        
+#        givens={
+#            x: train_set_x[index * batch_size: (index + 1) * batch_size] ,   
+#            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+#        }
+#    )
+#    
+#    
+#    get_test_output =theano.function(
+#        [index],
+#        [layer2.output,y],        
+#        givens={
+#            x: test_set_x[index * batch_size: (index + 1) * batch_size] ,   
+#            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+#        }
+#    )
+#    print '... training'
+#    # early-stopping parameters
+#    patience = 10000  # look as this many examples regardless
+#    patience_increase = 2  # wait this much longer when a new best is
+#                           # found
+#    improvement_threshold = 0.995  # a relative improvement of this much is
+#                                   # considered significant
+#    validation_frequency = min(n_train_batches, patience / 2)
+#                                  # go through this many
+#                                  # minibatche before checking the network
+#                                  # on the validation set; in this case we
+#                                  # check every epoch
+#
+#    best_validation_loss = np.inf
+#    best_iter = 0
+#    test_score = 0.
+#    start_time = timeit.default_timer()
+#
+#    epoch = 0
+#    done_looping = False
+#
+#    while (epoch < n_epochs) and (not done_looping):
+#        epoch = epoch + 1
+#        for minibatch_index in xrange(n_train_batches):
+#
+#            iter = (epoch - 1) * n_train_batches + minibatch_index
+#
+#            if iter % 100 == 0:
+#                print 'training @ iter = ', iter
+#            cost_ij = train_model(minibatch_index)
+#
+#            if (iter + 1) % validation_frequency == 0:
+#
+#                # compute zero-one loss on validation set
+#                validation_losses = [validate_model(i) for i
+#                                     in xrange(n_valid_batches)]
+#                this_validation_loss = np.mean(validation_losses)
+#                print('epoch %i, minibatch %i/%i, validation LSE %f ' %
+#                      (epoch, minibatch_index + 1, n_train_batches,
+#                       this_validation_loss))
+#
+#                # if we got the best validation score until now
+#                if this_validation_loss < best_validation_loss:
+#
+#                    #improve patience if loss improvement is good enough
+#                    if this_validation_loss < best_validation_loss *  \
+#                       improvement_threshold:
+#                        patience = max(patience, iter * patience_increase)
+#
+#                    # save best validation score and iteration number
+#                    best_validation_loss = this_validation_loss
+#                    best_iter = iter
+#
+#                    # test it on the test set
+#                    test_losses = [
+#                        test_model(i)
+#                        for i in xrange(n_test_batches)
+#                    ]
+#
+#
+#                    test_score = np.mean(test_losses)
+#                    print(('     epoch %i, minibatch %i/%i, test LSE of '
+#                           'best model %f ') %
+#                          (epoch, minibatch_index + 1, n_train_batches,
+#                           test_score ))
+#                           
+#                           
+#                    train_predictions = [get_train_output(i) for i in xrange(n_train_batches)]       
+#                    train_predictions=t_utils.unpackTheanoOutput(train_predictions) 
+#                    
+#                    test_predictions = [get_test_output(i) for i in xrange(n_test_batches)]       
+#                    test_predictions=t_utils.unpackTheanoOutput(test_predictions)
+#                    
+#                    p_opt = p_utils.siaNLFit(np.squeeze(train_predictions[0]),train_predictions[1])
+#                    
+#
+#                    
+#
+#                    y_test_NL = p_utils.siaNLPredict(test_predictions[1],p_opt)
+#                    
+#                    
+#                    vaf = p_utils.vaf(np.squeeze(test_predictions[0]),y_test_NL)
+#                    print 'vaf: ' + str(vaf)
+#
+#            if patience <= iter:
+#                done_looping = True
+#                break
+#
+##    filterWeights = np.squeeze(layer0.W.get_value())
+##    mapWeights = np.squeeze(layer2.W.get_value())
+##    mapWeights = np.reshape(mapWeights,(n_kern,mapSize,mapSize))
+#
+#    end_time = timeit.default_timer()
+#    print('Optimization complete.')
+#    print('Best validation score of %f obtained at iteration %i, '
+#          'with test performance %f' %
+#          (best_validation_loss * 100., best_iter + 1, test_score * 100.))
+#    print 'vaf: ' + str(vaf)      
+#    print >> sys.stderr, ('The code for file ' +
+#                          os.path.split(__file__)[1] +
+#                          ' ran for %.2fm' % ((end_time - start_time) / 60.))   
+#    return vaf
+def convNetOld(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+    import theano
+    from DeepLearningTutorials.convolutional_mlp import LeNetConvPoolLayer
+    from DeepLearningTutorials.mlp import HiddenLayer
+    from deepnn.costs import RMSE
+    import theano.tensor as T
+    import timeit
+    import t_utils
+    
+    if 'Batch_Size' in options:
+        batch_size  = options['Batch_Size']
+    else:
+        batch_size = 200
+    if 'N_Kern' in options:
+        n_kern  = options['N_Kern']
+    else:
+        n_kern = 1
+    if 'Learning_Rate' in options:
+        learning_rate  = options['Learning_Rate']
+    else:
+        learning_rate = 0.1   
+    if 'N_Epochs' in options:
+        n_epochs  = options['N_Epochs']
+    else:
+        n_epochs = 150     
+        
+    rng = np.random.RandomState(23455)
+    
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    # allocate symbolic variables for the data
+    index = T.lscalar()  # index to a [mini]batch
+
+    # start-snippet-1
+    x = T.matrix('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+
+    print '... building the model'
+    layer0_input = x.reshape((batch_size, 1, 30, 30))
+    
+    
+    layer0 = LeNetConvPoolLayer(
+        rng,
+        input=layer0_input,
+        image_shape=(batch_size, 1,  30, 30),
+        filter_shape=(n_kern, 1, 12, 12),
+        poolsize=(2, 2)
+    )
+    
+    
+    layer2_input = layer0.output.flatten(2)   
+
+    mapSize = 9
+    layer2 = HiddenLayer(
+        rng,
+        input=layer2_input,
+        n_in=n_kern * mapSize* mapSize,
+        n_out = 1,
+        activation=lambda t: T.maximum(0,t)
+    )
+    
+    cost = RMSE(layer2.output,y) 
+    
+    
+    test_model = theano.function(
+        [index],
+        RMSE(layer2.output,y) ,
+        givens={
+            x: test_set_x[index * batch_size: (index + 1) * batch_size],
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+    validate_model = theano.function(
+        [index],
+        RMSE(layer2.output,y),
+        givens={
+            x: valid_set_x[index * batch_size: (index + 1) * batch_size],
+            y: valid_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+    params =  layer2.params + layer0.params
+
+
+    grads = T.grad(cost, params)
+    
+    
+    updates = [
+        (param_i, param_i - learning_rate * grad_i)
+        for param_i, grad_i in zip(params, grads)
+    ]
+
+    train_model = theano.function(
+        [index],
+        cost,
+        updates=updates,
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    get_output =theano.function(
+        [index],
+        [layer2.output,y],        
+        givens={
+            x: test_set_x[index * batch_size: (index + 1) * batch_size] ,   
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    print '... training'
+    # early-stopping parameters
+    patience = 10000  # look as this many examples regardless
+    patience_increase = 2  # wait this much longer when a new best is
+                           # found
+    improvement_threshold = 0.995  # a relative improvement of this much is
+                                   # considered significant
+    validation_frequency = min(n_train_batches, patience / 2)
+                                  # go through this many
+                                  # minibatche before checking the network
+                                  # on the validation set; in this case we
+                                  # check every epoch
+
+    best_validation_loss = np.inf
+    best_iter = 0
+    test_score = 0.
+    start_time = timeit.default_timer()
+
+    epoch = 0
+    done_looping = False
+
+    while (epoch < n_epochs) and (not done_looping):
+        epoch = epoch + 1
+        for minibatch_index in xrange(n_train_batches):
+
+            iter = (epoch - 1) * n_train_batches + minibatch_index
+
+            if iter % 100 == 0:
+                print 'training @ iter = ', iter
+            cost_ij = train_model(minibatch_index)
+
+            if (iter + 1) % validation_frequency == 0:
+
+                # compute zero-one loss on validation set
+                validation_losses = [validate_model(i) for i
+                                     in xrange(n_valid_batches)]
+                this_validation_loss = np.mean(validation_losses)
+                print('epoch %i, minibatch %i/%i, validation RMSE %f ' %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss))
+
+                # if we got the best validation score until now
+                if this_validation_loss < best_validation_loss:
+
+                    #improve patience if loss improvement is good enough
+                    if this_validation_loss < best_validation_loss *  \
+                       improvement_threshold:
+                        patience = max(patience, iter * patience_increase)
+
+                    # save best validation score and iteration number
+                    best_validation_loss = this_validation_loss
+                    best_iter = iter
+
+                    # test it on the test set
+                    test_losses = [
+                        test_model(i)
+                        for i in xrange(n_test_batches)
+                    ]
+
+
+                    test_score = np.mean(test_losses)
+                    print(('     epoch %i, minibatch %i/%i, test RMSE of '
+                           'best model %f ') %
+                          (epoch, minibatch_index + 1, n_train_batches,
+                           test_score ))
+                           
+                    predictions = [
+                        get_output(i)
+                        for i in xrange(n_test_batches)
+                    ]       
+                    predictions=t_utils.unpackTheanoOutput(predictions)
+                    vaf = p_utils.vaf(np.squeeze(predictions[0]),predictions[1])
+                    print 'vaf: ' + str(vaf)
+
+            if patience <= iter:
+                done_looping = True
+                break
+
+    filterWeights = np.squeeze(layer0.W.get_value())
+    mapWeights = np.squeeze(layer2.W.get_value())
+    mapWeights = np.reshape(mapWeights,(n_kern,mapSize,mapSize))
+
+    end_time = timeit.default_timer()
+    print('Optimization complete.')
+    print('Best validation score of %f obtained at iteration %i, '
+          'with test performance %f' %
+          (best_validation_loss * 100., best_iter + 1, test_score * 100.))
+    print 'vaf: ' + str(vaf)      
+    print >> sys.stderr, ('The code for file ' +
+                          os.path.split(__file__)[1] +
+                          ' ran for %.2fm' % ((end_time - start_time) / 60.))
+    return vaf
+    
+def convNet3d(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+    import theano
+    from p_layers import p_convPoolLayer3d
+    from DeepLearningTutorials.mlp import HiddenLayer
+    from deepnn.costs import RMSE
+    import theano.tensor as T
+    import timeit
+    import t_utils
+    
+    if 'Batch_Size' in options:
+        batch_size  = options['Batch_Size']
+    else:
+        batch_size = 200
+    if 'N_Kern' in options:
+        n_kern  = options['N_Kern']
+    else:
+        n_kern = 1
+    if 'Learning_Rate' in options:
+        learning_rate  = options['Learning_Rate']
+    else:
+        learning_rate = 0.1   
+    if 'N_Epochs' in options:
+        n_epochs  = options['N_Epochs']
+    else:
+        n_epochs = 150     
+        
+    rng = np.random.RandomState(23455)
+    
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    # allocate symbolic variables for the data
+    index = T.lscalar()  # index to a [mini]batch
+
+    # start-snippet-1
+    x = T.tensor4('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    numFrames = np.shape(X_train)[1]
+    print '... building the model'
+
+
+    layer0_input =  x.reshape((batch_size,numFrames, 1, 30, 30))
+    
+    
+    layer0 =p_convPoolLayer3d(
+        rng,
+        input=layer0_input,
+        image_shape=(batch_size,numFrames, 1, 30, 30),
+        filter_shape=(n_kern,numFrames, 1, 12, 12),
+        poolsize=(2, 2)
+    )
+    
+    
+#        layer2_input = layer2_input + layer0[frame].output.flatten(2)   
+    layer2_input = layer0.output.flatten(2) 
+    
+    mapSize = 9
+    layer2 = HiddenLayer(
+        rng,
+        input=layer2_input,
+        n_in=n_kern * mapSize* mapSize,
+        n_out = 1,
+        activation=lambda t: T.maximum(0,t)
+    )
+    
+    cost = RMSE(layer2.output,y) 
+    
+    
+    test_model = theano.function(
+        [index],
+        RMSE(layer2.output,y) ,
+        givens={
+            x: test_set_x[index * batch_size: (index + 1) * batch_size],
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+
+    validate_model = theano.function(
+        [index],
+        RMSE(layer2.output,y),
+        givens={
+            x: valid_set_x[index * batch_size: (index + 1) * batch_size],
+            y: valid_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    params =  layer2.params +layer0.params
+
+    grads = T.grad(cost, params)
+    
+    
+    updates = [
+        (param_i, param_i - learning_rate * grad_i)
+        for param_i, grad_i in zip(params, grads)
+    ]
+
+    train_model = theano.function(
+        [index],
+        cost,
+        updates=updates,
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size],
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    get_train_output =theano.function(
+        [index],
+        [layer2.output,y],        
+        givens={
+            x: train_set_x[index * batch_size: (index + 1) * batch_size] ,   
+            y: train_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    
+    
+    get_test_output =theano.function(
+        [index],
+        [layer2.output,y],        
+        givens={
+            x: test_set_x[index * batch_size: (index + 1) * batch_size] ,   
+            y: test_set_y[index * batch_size: (index + 1) * batch_size]
+        }
+    )
+    print '... training'
+    # early-stopping parameters
+    patience = 10000  # look as this many examples regardless
+    patience_increase = 2  # wait this much longer when a new best is
+                           # found
+    improvement_threshold = 0.995  # a relative improvement of this much is
+                                   # considered significant
+    validation_frequency = min(n_train_batches, patience / 2)
+                                  # go through this many
+                                  # minibatche before checking the network
+                                  # on the validation set; in this case we
+                                  # check every epoch
+
+    best_validation_loss = np.inf
+    best_iter = 0
+    test_score = 0.
+    start_time = timeit.default_timer()
+
+    epoch = 0
+    done_looping = False
+
+    while (epoch < n_epochs) and (not done_looping):
+        epoch = epoch + 1
+        for minibatch_index in xrange(n_train_batches):
+
+            iter = (epoch - 1) * n_train_batches + minibatch_index
+
+            if iter % 100 == 0:
+                print 'training @ iter = ', iter
+            cost_ij = train_model(minibatch_index)
+
+            if (iter + 1) % validation_frequency == 0:
+
+                # compute zero-one loss on validation set
+                validation_losses = [validate_model(i) for i
+                                     in xrange(n_valid_batches)]
+                this_validation_loss = np.mean(validation_losses)
+                print('epoch %i, minibatch %i/%i, validation RMSE %f ' %
+                      (epoch, minibatch_index + 1, n_train_batches,
+                       this_validation_loss))
+
+                # if we got the best validation score until now
+                if this_validation_loss < best_validation_loss:
+
+                    #improve patience if loss improvement is good enough
+                    if this_validation_loss < best_validation_loss *  \
+                       improvement_threshold:
+                        patience = max(patience, iter * patience_increase)
+
+                    # save best validation score and iteration number
+                    best_validation_loss = this_validation_loss
+                    best_iter = iter
+
+                    # test it on the test set
+                    test_losses = [
+                        test_model(i)
+                        for i in xrange(n_test_batches)
+                    ]
+
+
+                    test_score = np.mean(test_losses)
+                    print(('     epoch %i, minibatch %i/%i, test RMSE of '
+                           'best model %f ') %
+                          (epoch, minibatch_index + 1, n_train_batches,
+                           test_score ))
+                           
+                           
+                    train_predictions = [get_train_output(i) for i in xrange(n_train_batches)]       
+                    train_predictions=t_utils.unpackTheanoOutput(train_predictions) 
+                    
+                    test_predictions = [get_test_output(i) for i in xrange(n_test_batches)]       
+                    test_predictions=t_utils.unpackTheanoOutput(test_predictions)
+                    
+                    p_opt = p_utils.siaNLFit(np.squeeze(train_predictions[0]),train_predictions[1])
+                    
+
+                    
+
+                    y_test_NL = p_utils.siaNLPredict(test_predictions[1],p_opt)
+                    
+                    
+                    vaf = p_utils.vaf(np.squeeze(test_predictions[0]),y_test_NL)
+                    print 'vaf: ' + str(vaf)
+
+            if patience <= iter:
+                done_looping = True
+                break
+
+#    filterWeights = np.squeeze(layer0.W.get_value())
+#    mapWeights = np.squeeze(layer2.W.get_value())
+#    mapWeights = np.reshape(mapWeights,(n_kern,mapSize,mapSize))
+
+    end_time = timeit.default_timer()
+    print('Optimization complete.')
+    print('Best validation score of %f obtained at iteration %i, '
+          'with test performance %f' %
+          (best_validation_loss * 100., best_iter + 1, test_score * 100.))
+    print 'vaf: ' + str(vaf)      
+    print >> sys.stderr, ('The code for file ' +
+                          os.path.split(__file__)[1] +
+                          ' ran for %.2fm' % ((end_time - start_time) / 60.))
+    return vaf
+
+def phaseNeuralNet(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+    from DeepLearningTutorials.mlp import HiddenLayer
+    from deepnn.costs import LSE as LSE
+    import theano.tensor as T
+    
+    ####################
+    #DEFAULT PARAMETERS#
+    ####################
+    
+    batch_size = optDef('Batch_Size',options,1875)    
+    n_kern = optDef('N_Kern',options,1)
+    learning_rate = optDef('Learning_Rate',options,0.001)
+    tent_learning_rate = optDef('Tent_Learning_Rate',options,0.00000000001)
+    n_epochs = optDef('N_Epochs',options,150)
+    L1_lambda = optDef('L1',options,0)
+    L2_lambda = optDef('L2',options,0)
+
+
+    #######################
+    #THEANO VARIABLE SETUP#
+    #######################
+    
+    rng = np.random.RandomState(666)
+    
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    # allocate symbolic variables for the data
+    index = T.lscalar()  # index to a [mini]batch
+
+    # start-snippet-1
+    x = T.tensor3('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    theano_rng = RandomStreams(rng.randint(666))
+    ourFunctions = t_utils.tFunctions(x,y,index,batch_size,n_train_batches,n_valid_batches,n_test_batches)    
+
+    
+    
+    numFrames = np.shape(X_train)[1]
+    winLen = int(np.sqrt(np.shape(X_train)[2]))
+    stimLen = int(np.shape(X_train)[2])
+    maxResp = np.max(np.abs(np.concatenate((y_train,y_valid,y_test))))
+    #################
+    #MODEL CREATION #
+    #################
+    
+    print '... building the model'
+    
+
+    layer0_input = [None] * numFrames
+    layer0 = [None] * numFrames
+    for frame in (range(numFrames)):
+        layer0_input[frame] =  x[:,frame,:]
+        
+        
+
+    
+        layer0[frame] =p_layers.HiddenLayer(
+            rng,
+            theano_rng,
+            input=layer0_input[frame],
+            n_in = stimLen,
+            n_out = 1,
+            activation = lambda x:x
+
+        )
+
+    layer2_input = T.sum([layer0[frame].output for frame in range(numFrames)] ,axis=0)  
+#    finalOutput = T.nnet.softplus(layer2_input)
+    layer2 = p_layers.p_tentLayer(layer2_input,7,maxResp,fitIntercept=False)
+#    finalOutput = T.nnet.relu(layer2.output)
+    finalOutput = T.nnet.softplus(layer2.output)
+#    finalOutputNoNL = layer2.output
+    finalOutputNoNL =  T.nnet.softplus(layer2.output)
+    ################################ 
+    #MODEL FITTING ALGORITHM SET UP#
+    ################################
+
+    params =  []
+    for frame in range(numFrames):
+        params = params+ layer0[frame].params
+        
+        
+#    L1 = T.sum(abs(layer0.W))
+#    L2 = T.sum(layer0.W ** 2)
+    cost = LSE(finalOutput,y) #+ L1*L1_lambda + L2*L2_lambda
+     
+    grads = T.grad(cost, params)
+    
+    
+    updates = [(param_i, param_i - learning_rate * grad_i)
+                for param_i, grad_i in zip(params, grads)]
+
+
+
+    train_model = ourFunctions.createUpdateFunc(cost,updates,train_set_x,train_set_y)
+    
+    validate_model = ourFunctions.createXYFunc(LSE(finalOutput,y),valid_set_x,valid_set_y)
+    test_model = ourFunctions.createXYFunc(LSE(finalOutput,y),test_set_x,test_set_y)
+
+    get_train_output = ourFunctions.createXYFunc([finalOutput,y],train_set_x,train_set_y)
+    get_validation_output = ourFunctions.createXYFunc([finalOutput,y],valid_set_x,valid_set_y)
+    get_test_output = ourFunctions.createXYFunc([finalOutput,y],test_set_x,test_set_y)
+
+    
+    #train the output non-linearity
+    NLparams = layer2.params
+    NLcost = LSE(finalOutputNoNL,y)
+    NLgrads = T.grad(NLcost, NLparams)
+    
+    
+    NLupdates = [(param_i, param_i - tent_learning_rate * grad_i)
+                for param_i, grad_i in zip(NLparams, NLgrads)]
+                    
+    train_NL = ourFunctions.createUpdateFunc(NLcost,NLupdates,train_set_x,train_set_y)
+    
+    validate_NL = ourFunctions.createXYFunc(LSE(finalOutputNoNL,y),valid_set_x,valid_set_y)
+    test_NL = ourFunctions.createXYFunc(LSE(finalOutputNoNL,y),test_set_x,test_set_y)
+
+    #########################################
+    #CREATE VALIDATION AND TESTING FUNCTIONS#    
+    #########################################
+
+
+    def validation():
+        #function that runs every validation, and gives validation score
+        validation_losses = [validate_model(i) for i
+                     in xrange(n_valid_batches)]
+        this_validation_loss = np.mean(validation_losses)
+        
+        return this_validation_loss
+    def testVafBase():
+        resultDict = dict()
+        #function that runs every test and gives test score (in this case, prediction vaf)
+
+        train_predictions = [get_train_output(i) for i in xrange(n_train_batches)]       
+        train_predictions=t_utils.unpackTheanoOutput(train_predictions) 
+        
+        validation_predictions = [get_validation_output(i) for i in xrange(n_valid_batches)]       
+        validation_predictions=t_utils.unpackTheanoOutput(validation_predictions)
+        
+        test_predictions = [get_test_output(i) for i in xrange(n_test_batches)]       
+        test_predictions=t_utils.unpackTheanoOutput(test_predictions)
+        
+        p_opt = p_utils.siaNLFit(np.squeeze(train_predictions[0]),train_predictions[1])
+        
+        noNLValidVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),validation_predictions[1])
+        print 'valid vaf no NL: ' + str(noNLValidVaf)
+        noNLPredVaf = p_utils.vaf(np.squeeze(test_predictions[0]),test_predictions[1])
+        print 'pred vaf no NL: ' + str(noNLPredVaf)
+            
+        y_valid_NL = p_utils.siaNLPredict(validation_predictions[1],p_opt)
+        validVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),y_valid_NL)
+        print 'valid vaf NL fit: ' + str(validVaf)
+        y_test_NL = p_utils.siaNLPredict(test_predictions[1],p_opt)
+        predVaf = p_utils.vaf(np.squeeze(test_predictions[0]),y_test_NL)
+        print 'pred vaf NL fit: ' + str(predVaf)
+        
+        
+        resultDict['noNLValidVaf'] =noNLValidVaf
+        resultDict['noNLPredVaf'] = noNLPredVaf
+        resultDict['validVaf'] = validVaf
+        resultDict['predVaf'] =predVaf 
+        resultDict['p_opt'] = p_opt
+        
+        return resultDict
+    def validation_NL():
+        #function that runs every validation, and gives validation score
+        validation_losses = [validate_NL(i) for i
+                     in xrange(n_valid_batches)]
+        this_validation_loss = np.mean(validation_losses)
+#        print this_validation_loss
+        validation_predictions = [get_validation_output(i) for i in xrange(n_valid_batches)]       
+        validation_predictions=t_utils.unpackTheanoOutput(validation_predictions)
+        noNLValidVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),validation_predictions[1])
+        
+#        print noNLValidVaf
+        
+        return 100 - noNLValidVaf
+    def testVafMapWeights():
+        resultDict = testVafBase()
+        for frame in (range(numFrames)):
+            layer0[frame].save_bestParams()
+        
+        return resultDict
+    def testTentWeights():
+        resultDict = testVafBase()
+        
+        layer2.save_bestParams()
+        return resultDict
+        
+    ################
+    #MODEL TRAINING#
+    ################
+    print '... training'    
+    trainOptions = dict()
+    trainOptions['patience'] =10*(n_train_batches +10)
+    trainOptions['patience_increase'] = 1.2   
+    trainOptions['improvement_threshold'] = 1
+    trainOptions['n_epochs'] = n_epochs
+    
+    #Training!
+    results1 = ourFunctions.patienceTrain(train_model,validation,testVafMapWeights,trainOptions)     
+    for frame in (range(numFrames)):
+            layer0[frame].load_bestParams()
+
+    results2 = ourFunctions.patienceTrain(train_NL,validation_NL,testTentWeights,trainOptions)     
+    layer2.load_bestParams()
+    print ' results1'
+    print 'valid vaf no NL: ' + str(results1['noNLValidVaf']) 
+    print 'pred vaf no NL: ' + str(results1['noNLPredVaf'])
+    print 'valid vaf NL fit: ' + str(results1['validVaf'])
+    print 'pred vaf NL fit: ' + str(results1['predVaf'])
+    print 'p_opt: ' + str(results1['p_opt'])
+    print 'results2'
+    print 'valid vaf no NL: ' + str(results2['noNLValidVaf']) 
+    print 'pred vaf no NL: ' + str(results2['noNLPredVaf'])
+    print 'valid vaf NL fit: ' + str(results2['validVaf'])
+    print 'pred vaf NL fit: ' + str(results2['predVaf'])
+    print 'p_opt: ' + str(results2['p_opt'])
+    #done training, give results
+    print('Optimization complete.')
+
+    print 'vaf: ' + str(predVaf)      
+
+    
+#    bestModel = dict()
+#    bestModel['validVaf'] = validVaf
+#    bestModel['predVaf'] = predVaf
+#    bestModel['options'] = options
+#    bestModel['filterWeights'] = [layer0[xx].W.get_value() for xx in range(len(layer0))]
+#    bestModel['mapWeights']=layer2.W.get_value()
+#    bestModel['NLFit'] = p_opt
+#    bestModel['filterWeights'] = [np.squeeze(layer0[xx].W.get_value()) for xx in range(len(layer0))]
+#    bestModel['mapWeights']=[ np.reshape(xx,(9,9)).T for xx in np.split(np.squeeze(layer2.W.get_value()),16)]
+    
+    #plot
+    p_utils.plotMapWeights(bestModel['mapWeights'],n_kern,mapFrames)
+    p_utils.plotFilterWeights(bestModel['filterWeights'],n_kern)
+    #release theano variables
+
+    train_set_x.set_value([[]]) 
+    valid_set_x.set_value([[]]) 
+    test_set_x.set_value([[]]) 
+    
+    train_set_y.set_value([[]]) 
+    valid_set_y.set_value([[]]) 
+    test_set_y.set_value([[]]) 
+    
+    return bestModel
+
+
+def dropNet(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+    from deepnn.costs import LSE as LSE
+    import theano.tensor as T
+    ####################
+    #DEFAULT PARAMETERS#
+    ####################
+    
+    batch_size = optDef('Batch_Size',options,7500)    
+    n_kern = optDef('N_Kern',options,1)
+    learning_rate = optDef('Learning_Rate',options,0.001)
+    n_epochs = optDef('N_Epochs',options,150)
+    L1_lambda = optDef('L1',options,0)
+    L2_lambda = optDef('L2',options,0)
+
+
+    #######################
+    #THEANO VARIABLE SETUP#
+    #######################
+    
+    rng = np.random.RandomState(666)
+    
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_examples = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_examples = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_examples = test_set_x.get_value(borrow=True).shape[0]
+    
+    
+    n_train_batches = 1
+    n_valid_batches = 1
+    n_test_batches = 1
+
+    # allocate symbolic variables for the data
+    index = T.lscalar()  # index to a [mini]batch
+
+    # start-snippet-1
+    x = T.matrix('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    theano_rng = RandomStreams(rng.randint(666))
+    ourFunctions = t_utils.tFunctions(x,y,index,batch_size,n_train_batches,n_valid_batches,n_test_batches)    
+
+    
+    
+
+
+    stimLen = int(np.shape(X_train)[1])
+    maxResp = np.max(np.abs(np.concatenate((y_train,y_valid,y_test))))
+    #################
+    #MODEL CREATION #
+    #################
+    
+    print '... building the model'
+    
+#    W_values = np.asarray(np.zeros((stimLen,1)),dtype=theano.config.floatX)
+#    W_values = np.asarray(rng.normal(0,.0000001,(stimLen,1)),dtype=theano.config.floatX)
+#
+#    W = theano.shared(value=W_values, name='W', borrow=True)
+    
+    layer0 =p_layers.HiddenLayer(
+        rng,
+        theano_rng,
+        input=x,
+        n_in = stimLen,
+        n_out = 1,
+        activation = lambda x:T.nnet.relu(x)
+
+    )
+    finalOutput = layer0.output
+    
+    ################################ 
+    #MODEL FITTING ALGORITHM SET UP#
+    ################################
+
+    params =  layer0.params
+
+        
+        
+#    L1 = T.sum(abs(layer0.W))
+#    L2 = T.sum(layer0.W ** 2)
+    cost = LSE(finalOutput,y) #+ L1*L1_lambda + L2*L2_lambda
+     
+    grads = T.grad(cost, params)
+    
+    
+    updates = [(param_i, param_i - learning_rate * grad_i)
+                for param_i, grad_i in zip(params, grads)]
+
+
+
+    train_model = ourFunctions.createUpdateFunc(cost,updates,train_set_x,train_set_y)
+    
+    validate_model = ourFunctions.createXYFuncWithBatch(LSE(finalOutput,y),valid_set_x,valid_set_y,n_valid_examples)
+    test_model = ourFunctions.createXYFuncWithBatch(LSE(finalOutput,y),test_set_x,test_set_y,n_test_examples)
+
+    get_train_output = ourFunctions.createXYFunc([finalOutput,y],train_set_x,train_set_y)
+    get_validation_output = ourFunctions.createXYFuncWithBatch([finalOutput,y],valid_set_x,valid_set_y,n_valid_examples)
+    get_test_output = ourFunctions.createXYFuncWithBatch([finalOutput,y],test_set_x,test_set_y,n_test_examples)
+
+    
+
+    #########################################
+    #CREATE VALIDATION AND TESTING FUNCTIONS#    
+    #########################################
+
+
+    def validation():
+        #function that runs every validation, and gives validation score
+        validation_losses = [validate_model(i) for i
+                     in xrange(n_valid_batches)]
+        this_validation_loss = np.mean(validation_losses)
+        return this_validation_loss
+    def testVaf():
+        #function that runs every test and gives test score (in this case, prediction vaf)
+
+        train_predictions = [get_train_output(i) for i in xrange(n_train_batches)]       
+        train_predictions=t_utils.unpackTheanoOutput(train_predictions) 
+        
+        validation_predictions = [get_validation_output(i) for i in xrange(n_valid_batches)]       
+        validation_predictions=t_utils.unpackTheanoOutput(validation_predictions)
+        
+        test_predictions = [get_test_output(i) for i in xrange(n_test_batches)]       
+        test_predictions=t_utils.unpackTheanoOutput(test_predictions)
+        
+        p_opt = p_utils.siaNLFit(np.squeeze(train_predictions[0]),train_predictions[1])
+        
+        noNLValidVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),validation_predictions[1])
+        print 'valid vaf no NL: ' + str(noNLValidVaf)
+        noNLPredVaf = p_utils.vaf(np.squeeze(test_predictions[0]),test_predictions[1])
+        print 'pred vaf no NL: ' + str(noNLPredVaf)
+            
+        y_valid_NL = p_utils.siaNLPredict(validation_predictions[1],p_opt)
+        validVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),y_valid_NL)
+        print 'valid vaf NL fit: ' + str(validVaf)
+        y_test_NL = p_utils.siaNLPredict(test_predictions[1],p_opt)
+        predVaf = p_utils.vaf(np.squeeze(test_predictions[0]),y_test_NL)
+        print 'pred vaf NL fit: ' + str(predVaf)
+        
+        
+        layer0.save_bestParams()
+        
+        return predVaf,p_opt
+        
+    ################
+    #MODEL TRAINING#
+    ################
+    print '... training'    
+    trainOptions = dict()
+    trainOptions['patience'] =5*n_train_batches
+    trainOptions['patience_increase'] = 1.2   
+    trainOptions['improvement_threshold'] = 1
+    trainOptions['n_epochs'] = n_epochs
+    
+    #Training!
+    predVaf,p_opt = ourFunctions.patienceTrain(train_model,validation,testVaf,trainOptions)     
+    predVaf,p_opt = ourFunctions.patienceTrain(train_NL,validation,testVaf,trainOptions)     
+
+    #done training, give results
+    print('Optimization complete.')
+
+    print 'vaf: ' + str(predVaf)      
+
+
+    #plot
+    p_utils.plotMapWeights(bestModel['mapWeights'],n_kern,mapFrames)
+    p_utils.plotFilterWeights(bestModel['filterWeights'],n_kern)
+    #release theano variables
+
+    train_set_x.set_value([[]]) 
+    valid_set_x.set_value([[]]) 
+    test_set_x.set_value([[]]) 
+    
+    train_set_y.set_value([[]]) 
+    valid_set_y.set_value([[]]) 
+    test_set_y.set_value([[]]) 
+    
+    return bestModel
+
+
+def alphaConvNet_DownsampSwitch(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+
+    from DeepLearningTutorials.mlp import HiddenLayer
+    from deepnn.costs import RMSE as RMSE
+    from deepnn.costs import LSE as LSE
+    from t_utils import RMSLE as RMSLE
+    
+    import theano.tensor as T
+    
+    theano.config.optimizer='fast_compile'
+    theano.config.exception_verbosity='high'
+    theano.config.compute_test_value = 'warn'
+    
+    ####################
+    #DEFAULT PARAMETERS#
+    ####################
+    
+    batch_size = optDef('Batch_Size',options,500)    
+    n_kern = optDef('N_Kern',options,1)
+    learning_rate = optDef('Learning_Rate',options,0.01)
+    n_epochs = optDef('N_Epochs',options,700)
+    #We will only be applying L1/L2 to the mapping layer, not the filter
+    L1_lambda = optDef('L1',options,0)
+    L2_lambda = optDef('L2',options,0)
+    filter_size = optDef('Filter_Size',options,12)
+    pool_size = optDef('Pool_Size',options,2)
+    momentum = optDef('Momentum',options,0.0)
+    #######################
+    #THEANO VARIABLE SETUP#
+    #######################
+    
+    rng = np.random.RandomState(23455)
+    
+    
+    train_set_x = p_utils.load_shared_data(X_train)
+    valid_set_x = p_utils.load_shared_data(X_valid)
+    test_set_x= p_utils.load_shared_data(X_test)
+    
+    train_set_y= T.cast(p_utils.load_shared_data(y_train),'float32')
+    valid_set_y= T.cast(p_utils.load_shared_data(y_valid),'float32')
+    test_set_y= T.cast(p_utils.load_shared_data(y_test),'float32')
+    
+    
+    
+    n_train_batches = train_set_x.get_value(borrow=True).shape[0]
+    n_valid_batches = valid_set_x.get_value(borrow=True).shape[0]
+    n_test_batches = test_set_x.get_value(borrow=True).shape[0]
+    n_train_batches /= batch_size
+    n_test_batches /= batch_size
+    n_valid_batches /= batch_size
+    # allocate symbolic variables for the data
+    index = T.lscalar()  # index to a [mini]batch
+
+    # start-snippet-1
+    x = T.tensor3('x')   # the data is presented as rasterized images
+    y = T.fvector('y')  # the labels are presented as 1D vector of
+                        # [int] labels
+    
+    x.tag.test_value = X_test.astype('float32')[0:batch_size]
+    y.tag.test_value = y_test.astype('float32')[0:batch_size]
+    
+    ourFunctions = t_utils.tFunctions(x,y,index,batch_size,n_train_batches,n_valid_batches,n_test_batches)    
+    theano_rng = RandomStreams(rng.randint(666))
+
+    
+    
+    numFrames = np.shape(X_train)[1]
+    winLen = int(np.sqrt(np.shape(X_train)[2]))
+    
+    #################
+    #MODEL CREATION #
+    #################
+    
+    print '... building the model'
+    
+    
+    layer0_input = [None] * numFrames
+    layer0 = [None] * numFrames
+    
+    alpha = theano.shared(np.asarray(0.50,dtype=theano.config.floatX),borrow=True)
+#    alpha_noise = theano.shared(np.asarray(0.0,dtype=theano.config.floatX),borrow=True)
+    print 'initial alpha: ' + str(alpha.get_value())
+    for frame in (range(numFrames)):
+        layer0_input[frame] =  x[:,frame,:].reshape((batch_size, 1, winLen, winLen))
+        
+    
+        layer0[frame] =p_layers.p_alphaConvPoolLayer(
+            rng,theano_rng,
+            input=layer0_input[frame],
+            image_shape=(batch_size, 1,  winLen, winLen),
+            filter_shape=(n_kern, 1, filter_size, filter_size),
+            poolsize=(pool_size, pool_size),
+            alpha = alpha,
+            
+                
+            downsamp_mode = 'average'
+        )
+
+        
+    
+    #DownSampled Net#
+      
+
+#    layer0_output_endNL = T.sum([layer0[frame].output_endNL.flatten(2) for frame in range(numFrames)] ,axis=0)  
+    layer0_output_midNL= T.sum([layer0[frame].output_midNL.flatten(2) for frame in range(numFrames)] ,axis=0)  
+#    layer2_input = layer0_output_endNL
+    layer2_input = layer0_output_midNL
+    mapFrames = 1
+    
+
+    mapSize = (winLen -filter_size + 1)/ pool_size
+    n_in = n_kern * mapSize* mapSize*mapFrames
+
+    layer2 = p_layers.HiddenLayer(
+        rng,
+        theano_rng,
+        input=layer2_input,
+        n_in= n_in,
+        n_out = 1,
+#        W=W,
+        activation=lambda x: T.nnet.relu(x, alpha=0)
+#        activation=lambda x: T.nnet.softplus(x)
+    )
+    
+
+
+    
+    
+    #NODownSampled Net#
+       
+    layer0_output_noDS= T.sum([layer0[frame].conv_out_midNL.flatten(2) for frame in range(numFrames)] ,axis=0)  
+
+    layer3_input = layer0_output_noDS
+    mapFrames = 1
+    
+
+    mapSizeNoDS = (winLen -filter_size + 1)
+    n_in_noDS = n_kern * mapSizeNoDS* mapSizeNoDS*mapFrames
+
+    layer3 = p_layers.HiddenLayer(
+        rng,
+        theano_rng,
+        input=layer3_input,
+        n_in= n_in_noDS,
+        n_out = 1,
+#        W=W,
+        activation=lambda x: T.nnet.relu(x, alpha=0)
+#        activation=lambda x: T.nnet.softplus(x)
+    )
+    
+
+
+    
+    ################################ 
+    #MODEL FITTING ALGORITHM SET UP#
+    ################################
+        
+    for phase in range(1):
+#    for phase in range(2):
+        if phase == 0:
+            model_output =  layer2.output
+            L1 = T.mean(abs(layer2.W))
+            L2 = T.mean(layer2.W ** 2)
+            params =  layer2.params +[alpha] 
+            for frame in range(numFrames):
+                params = params+ layer0[frame].params
+
+            cost = LSE(model_output,y) + L1*(L1_lambda) + L2*(L2_lambda)
+            
+        elif phase ==1:
+            layer3.b.set_value(layer2.b.get_value())
+            layer3.best_b.set_value(layer2.b.get_value())
+
+            upSampledW = p_utils.upsample(layer2.W.get_value(),filter_size,kern_size = mapSizeNoDS,downsamp=pool_size)
+            upSampledW = upSampledW/np.square(pool_size)
+            upSampledW = upSampledW.astype(theano.config.floatX)
+            layer3.W.set_value(upSampledW)
+            layer3.best_W.set_value(upSampledW)
+            
+            model_output =  layer3.output
+            L1 = T.mean(abs(layer3.W))
+            L2 = T.mean(layer3.W ** 2)
+#            L1 = 0
+#            L2 =0
+            params =  layer3.params +[alpha] 
+            cost = LSE(model_output,y) #+ L1*(L1_lambda) + L2*(L2_lambda)
+#            learning_rate = learning_rate/10
+        
+
+    
+            
+#        cost = LSE(model_output,y) + L1*(L1_lambda) + L2*(L2_lambda)
+#    #    cost = RMSE(model_output,y) + L1*L1_lambda + L2*L2_lambda
+#    #    cost = RMSLE(model_output,y) + L1*L1_lambda + L2*L2_lambda
+#        
+        useMomentum = 0
+        if ~useMomentum:  
+            grads = T.grad(cost, params)
+            updates = [(param_i, param_i - learning_rate * grad_i)
+                    for param_i, grad_i in zip(params, grads)]
+            print 'not using momentum'
+        else:  
+            updates, (global_learning_rate, global_momentum), incs = t_utils.compute_updates_grads(cost,params,learning_rate=learning_rate,masks=None,momentum=momentum)
+            print 'using momentum'
+        
+        train_model = ourFunctions.createUpdateFunc(cost,updates,train_set_x,train_set_y)
+        
+        validate_model = ourFunctions.createXYFunc(LSE(model_output,y),valid_set_x,valid_set_y)
+    
+        get_train_output = ourFunctions.createXYFunc([model_output,y],train_set_x,train_set_y)
+        get_validation_output = ourFunctions.createXYFunc([model_output,y],valid_set_x,valid_set_y)
+        get_test_output = ourFunctions.createXYFunc([model_output,y],test_set_x,test_set_y)
+        
+    #    get_train_output = ourFunctions.createXYFunc([layer2.dot_output,y],train_set_x,train_set_y)
+    #    get_validation_output = ourFunctions.createXYFunc([layer2.dot_output,y],valid_set_x,valid_set_y)
+    #    get_test_output = ourFunctions.createXYFunc([layer2.dot_output,y],test_set_x,test_set_y)
+    #    
+    #    get_train_dot = ourFunctions.createXYFunc([layer2.dot_output,y],train_set_x,train_set_y)
+    #    get_train_lin = ourFunctions.createXYFunc([layer2.lin_output,y],train_set_x,train_set_y)
+        
+        
+    
+        
+        
+    
+    
+        #########################################
+        #CREATE VALIDATION AND TESTING FUNCTIONS#    
+        #########################################
+    
+    
+        def validation():
+            #function that runs every validation, and gives validation score
+#            for layer in layer0:
+#                layer.set_test_mode()
+                
+            validation_losses = [validate_model(i) for i
+                         in xrange(n_valid_batches)]
+            this_validation_loss = np.mean(validation_losses)
+            
+#            for layer in layer0:
+#                layer.set_train_mode()
+            return this_validation_loss
+        def testVaf():
+#            for layer in layer0:
+#                layer.set_test_mode()
+            resultDict = dict()
+            #function that runs every test and gives test score (in this case, prediction vaf)
+    
+            train_predictions = [get_train_output(i) for i in xrange(n_train_batches)]       
+            train_predictions=t_utils.unpackTheanoOutput(train_predictions) 
+            
+            validation_predictions = [get_validation_output(i) for i in xrange(n_valid_batches)]       
+            validation_predictions=t_utils.unpackTheanoOutput(validation_predictions)
+            
+            test_predictions = [get_test_output(i) for i in xrange(n_test_batches)]       
+            test_predictions=t_utils.unpackTheanoOutput(test_predictions)
+            
+            noNLValidVaf = p_utils.vaf(np.squeeze(validation_predictions[0]),validation_predictions[1])
+            print 'valid vaf no NL: ' + str(noNLValidVaf)
+            noNLPredVaf = p_utils.vaf(np.squeeze(test_predictions[0]),test_predictions[1])
+            print 'pred vaf no NL: ' + str(noNLPredVaf)
+            
+            
+            p_opt = p_utils.siaNLFit(train_predictions[1],np.squeeze(train_predictions[0]))
+    
+                
+            y_valid_NL = p_utils.siaNLPredict(np.squeeze(validation_predictions[0]),p_opt)
+            validVaf = p_utils.vaf(y_valid_NL,validation_predictions[1])
+            print 'valid vaf NL fit: ' + str(validVaf)
+            y_test_NL = p_utils.siaNLPredict(np.squeeze(test_predictions[0]),p_opt)
+            predVaf = p_utils.vaf(y_test_NL,test_predictions[1])
+            print 'pred vaf NL fit: ' + str(predVaf)
+            
+            
+            p_optREV = p_utils.siaNLFit(np.squeeze(train_predictions[0]),train_predictions[1])       
+    
+            
+            y_valid_NLREV = p_utils.siaNLPredict(validation_predictions[1],p_optREV)
+            validVafREV = p_utils.vaf(np.squeeze(validation_predictions[0]),y_valid_NLREV)
+            print 'valid vafREV NL fit: ' + str(validVafREV)
+            y_test_NLREV = p_utils.siaNLPredict((test_predictions[1]),p_optREV)
+            predVafREV = p_utils.vaf(np.squeeze(test_predictions[0]),y_test_NLREV)
+            print 'pred vafREV NL fit: ' + str(predVafREV)
+            
+    
+            
+            
+            
+            for layer in layer0:
+                layer.save_bestParams()
+            layer2.save_bestParams()
+            layer3.save_bestParams()
+            print 'alpha: ' + str(alpha.get_value())
+            
+            resultDict['noNLValidVaf'] =noNLValidVaf
+            resultDict['noNLPredVaf'] = noNLPredVaf
+            resultDict['validVaf'] = validVaf
+            resultDict['predVaf'] =predVaf 
+            resultDict['validVafREV'] = validVafREV
+            resultDict['predVafREV'] =predVafREV 
+            resultDict['p_opt'] = p_opt
+            resultDict['alpha'] = alpha.get_value()
+            resultDict['test_predictions'] = test_predictions
+            
+#            for layer in layer0:
+#                layer.set_train_mode()
+            return resultDict
+                
+        ################
+        #MODEL TRAINING#
+        ################
+        print '... training'    
+        trainOptions = dict()
+        trainOptions['patience'] = 12*(n_train_batches+100)
+        trainOptions['patience_increase'] = 1.4  
+        trainOptions['improvement_threshold'] = 1
+        trainOptions['n_epochs'] = n_epochs
+        
+
+
+        resultDict = ourFunctions.patienceTrain(train_model,validation,testVaf,trainOptions)
+        
+        
+        ################
+        #MODEL Clean up#
+        ################
+        for layer in layer0:
+            layer.load_bestParams()
+            
+        layer2.load_bestParams()
+        layer3.load_bestParams()
+        print 'first iteration alpha: ' + str(alpha.get_value())
+        alpha.set_value(resultDict['alpha'] )
+        
+
+    #done training, give results
+    print('Optimization complete.')
+#    aa = layer2.W.get_value()
+#    bb = p_utils.upsample(aa,4,kern_size = 27,downsamp=2)
+    print 'noNLValidVaf '+ str(resultDict['noNLValidVaf'] )
+    print 'noNLPredVaf ' + str(resultDict['noNLPredVaf'] )
+    print 'validVaf ' + str(resultDict['validVaf'])
+    print 'predVaf ' + str(resultDict['predVaf'] )
+    print 'p_opt ' + str(resultDict['p_opt'])
+    print alpha.get_value()
+    
+    print 'Printing hyperparameters ...'
+    print 'batch_size: ' +str(batch_size)
+    print 'n_kern: ' +str(n_kern)
+    print 'learning_rate: ' + str(learning_rate) 
+    print 'n_epochs: ' +str(n_epochs)
+    print 'L1_lambda: ' +str(L1_lambda) 
+    print 'L2_lambda: ' +str(L2_lambda) 
+    print 'filter_size: ' +str(filter_size) 
+    print 'pool_size: ' +str(pool_size)
+    print 'momentum: ' +str(momentum) 
+    
+    bestModel = dict()
+    bestModel['validVaf'] = resultDict['validVaf']
+    bestModel['predVaf'] = resultDict['predVaf']
+    bestModel['noNLValidVaf'] =resultDict['noNLValidVaf']
+    bestModel['noNLPredVaf'] = resultDict['noNLPredVaf']
+    bestModel['alpha'] = resultDict['alpha']
+    bestModel['validVafREV']= resultDict['validVafREV'] 
+    bestModel['predVafREV']= resultDict['predVafREV'] 
+    bestModel['options'] = options.copy()
+    bestModel['filterWeights'] = [layer0[xx].W.get_value() for xx in range(len(layer0))]
+    bestModel['mapWeights']=layer2.W.get_value()
+    bestModel['p_opt'] = resultDict['p_opt']
+#    bestModel['filterWeights'] = [np.squeeze(layer0[xx].W.get_value()) for xx in range(len(layer0))]
+#    bestModel['mapWeights']=[ np.reshape(xx,(9,9)).T for xx in np.split(np.squeeze(layer2.W.get_value()),16)]
+    
+    #plot
+#    p_utils.plotMapWeights(bestModel['mapWeights'],n_kern,mapFrames)
+#    p_utils.plotFilterWeights(bestModel['filterWeights'],n_kern)
+    #release theano variables
+
+#    train_set_x.set_value([[]]) 
+#    valid_set_x.set_value([[]]) 
+#    test_set_x.set_value([[]]) 
+#    
+#    train_set_y.set_value([[]]) 
+#    valid_set_y.set_value([[]]) 
+#    test_set_y.set_value([[]]) 
+    
+    return bestModel
+
+def runPhaseNeuralNet(stim,resp,options=None,mode = 'user'):
+    print 'runPhaseNeuralNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = phaseNeuralNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result    
+def runConvNet3d(stim,resp,options=None,mode = 'user'):
+    print 'runConvNet3d'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'int', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+    
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsStack(X,options['Num_Frames'])
+    X= np.expand_dims(X,axis=2)
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = convNet3d(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    
+def runConvNetOld(stim,resp,options,mode = 'user'):
+    print 'runConvNetOld'
+    if options == None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'int', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+    
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:]
+    X_reg = X[estIdx:regIdx,:]
+    X_test = X[regIdx:predIdx,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = convNetOld(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return    result
+    
+def runAlphaConvNet_DownsampSwitch(stim,resp,options=None,mode = 'user'):
+    print 'runAlphaConvNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = alphaConvNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    

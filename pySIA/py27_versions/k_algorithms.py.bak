@@ -1,0 +1,219 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue May 17 12:41:21 2016
+
+@author: phil
+
+Methods that use keras extensively
+Using python 3.5
+"""
+
+import keras
+import theano
+import p_utils
+from p_utils import optDef
+import numpy as np
+import os
+import k_utils
+os.environ["THEANO_FLAGS"] = "mode=FAST_RUN,device=gpu,floatX=float32"
+from keras.layers import Dense, Dropout, Activation, Flatten,advanced_activations
+from keras.layers import Convolution2D, AveragePooling2D
+from keras.models import Sequential
+from keras.regularizers import l1
+
+def kConvNet(X_train,y_train,X_valid,y_valid,X_test,y_test,options=dict()):
+    ''' X_vectors should be (nb_samples, nb_image_frames (or other third dimension), nb_rows,nb_columns) '''   
+    
+    ####################
+    #DEFAULT PARAMETERS#
+    ####################
+    
+    batch_size = optDef('Batch_Size',options,500)    
+    n_kern = optDef('N_Kern',options,1)
+    learning_rate = optDef('Learning_Rate',options,0.01)
+    n_epochs = optDef('N_Epochs',options,700)
+    #We will only be applying L1/L2 to the mapping layer, not the filter
+    L1_lambda = optDef('L1',options,0)
+    L2_lambda = optDef('L2',options,0)
+    filter_size = optDef('Filter_Size',options,12)
+    pool_size = optDef('Pool_Size',options,2)
+
+
+    ###########
+    #VARIABLES#
+    ###########
+    numRows =  X_train.shape[2]
+    numCols =  X_train.shape[3]
+    assert numRows == numCols
+    numFrames = X_train.shape[1]
+
+    #since the lambdas were originally estimated as regularization
+    #the mean weight value of the map layer, we convert it here so it is a regularizer 
+    #on the sum of the weights in the map layer.
+
+    convImageSize = numRows - filter_size + 1
+    downsampImageSize = (convImageSize/pool_size)**2
+    sum_L1_lambda = L1_lambda /downsampImageSize 
+    sum_L2_lambda = L2_lambda /downsampImageSize #not used
+    #################
+    #MODEL CREATION #
+    #################
+    
+    model = Sequential()
+    model.add(Convolution2D(1, filter_size, filter_size, border_mode='valid', input_shape=(numFrames, numRows, numCols),init='glorot_normal'))
+    model.add(k_utils.singlePReLU(weights=0.5))
+    model.add(AveragePooling2D(pool_size=(pool_size, pool_size)))
+    model.add(Flatten())
+    model.add(Dense(1,W_regularizer=l1(sum_L1_lambda),init='glorot_uniform'))
+    model.add(Activation('relu'))
+    
+#    optimizerFunction = keras.optimizers.SGD(lr=0.001,decay=0.0, momentum=0.9,nesterov=True)
+#    optimizerFunction = keras.optimizers.Adadelta()
+    optimizerFunction = keras.optimizers.Adam()
+    model.compile(loss='mse', optimizer=optimizerFunction)
+    
+    #################
+    #MODEL TRAINING #
+    #################
+    
+    earlyStop=keras.callbacks.EarlyStopping(monitor='val_loss', patience=30, verbose=0, mode='auto')
+    model.fit(X_train,y_train, validation_data=(X_valid,y_valid), nb_epoch = 500,batch_size=200,callbacks=[ earlyStop],verbose=2)
+   
+    ############
+    #VALIDATION#
+    ############
+    train_predictions =np.squeeze(model.predict(X_train))
+    validation_predictions = np.squeeze(model.predict(X_valid))
+    test_predictions = np.squeeze(model.predict(X_test))
+    
+    noNLValidVaf = p_utils.vaf(validation_predictions,y_valid)
+    noNLPredVaf = p_utils.vaf(test_predictions,y_test)
+
+    p_opt = p_utils.siaNLFit(y_train,train_predictions)
+    
+    y_valid_NL = p_utils.siaNLPredict(validation_predictions,p_opt)
+    validVaf = p_utils.vaf(y_valid_NL,y_valid)
+
+    y_test_NL = p_utils.siaNLPredict(test_predictions,p_opt)
+    predVaf = p_utils.vaf(y_test_NL,y_test)
+    
+    ################
+    #RETURN RESULTS#
+    ################
+    print 'p_opt ' + str(p_opt)
+    print 'valid vaf no NL: ' + str(noNLValidVaf)
+    print 'pred vaf no NL: ' + str(noNLPredVaf)
+    print 'valid vaf NL fit: ' + str(validVaf)
+    print 'pred vaf NL fit: ' + str(predVaf)
+    print 'alpha: ' + str(model.get_weights()[1])
+    
+    print 'Printing hyperparameters ...'
+    print 'batch_size: ' +str(batch_size)
+    print 'n_kern: ' +str(n_kern)
+    print 'learning_rate: ' + str(learning_rate) 
+    print 'n_epochs: ' +str(n_epochs)
+    print 'L1_lambda: ' +str(L1_lambda) 
+    print 'L2_lambda: ' +str(L2_lambda) 
+    print 'filter_size: ' +str(filter_size) 
+    print 'pool_size: ' +str(pool_size)
+   
+    bestModel = dict()
+    bestModel['validVaf'] = validVaf
+    bestModel['predVaf'] = predVaf
+    bestModel['noNLValidVaf'] =noNLValidVaf
+    bestModel['noNLPredVaf'] = noNLPredVaf
+    bestModel['fullModel'] = model.get_weights()
+    
+    return bestModel
+
+def kRegression(X_train,y_train,X_valid,y_valid,X_test,y_test,options=dict()):
+    ''' X_vectors should be (nb_samples, nb_Features) '''    
+
+    ####################
+    #DEFAULT PARAMETERS#
+    ####################
+    options['Batch_Size'] = optDef('Batch_Size',options,500)    
+    options['Learning_Rate'] = optDef('Learning_Rate',options,0.01)
+    options['N_Epochs'] = optDef('N_Epochs',options,700)
+
+    ###########
+    #VARIABLES#
+    ###########
+    numFeatures =  X_train.shape[1]
+    results = dict()
+    #################
+    #MODEL CREATION #
+    #################
+    model = Sequential()
+    model.add(Dense(1,init='zero',input_dim=numFeatures))
+    model.add(Activation('relu'))
+    
+    #note: the Adam optimizer doesn't seem to work well here, so we use SGD
+    optimizerFunction = keras.optimizers.SGD(lr=options['Learning_Rate'],decay=0.0, momentum=0.9,nesterov=True)
+    model.compile(loss='mse', optimizer=optimizerFunction)
+    
+    #################
+    #MODEL TRAINING #
+    #################
+    
+    earlyStop=keras.callbacks.EarlyStopping(monitor='val_loss', patience=30, verbose=0, mode='auto')
+    model.fit(X_train,y_train, validation_data=(X_valid,y_valid), nb_epoch = options['N_Epochs'],
+              batch_size=options['Batch_Size'],callbacks=[ earlyStop],verbose=2)
+   
+    ############
+    #VALIDATION#
+    ############
+    
+    train_predictions =np.squeeze(model.predict(X_train))
+    validation_predictions = np.squeeze(model.predict(X_valid))
+    test_predictions = np.squeeze(model.predict(X_test))
+    
+    noNLValidVaf = p_utils.vaf(validation_predictions,y_valid)
+    noNLPredVaf = p_utils.vaf(test_predictions,y_test)
+    
+    p_opt = p_utils.siaNLFit(y_train,train_predictions)
+    
+    y_valid_NL = p_utils.siaNLPredict(validation_predictions,p_opt)
+    validVaf = p_utils.vaf(y_valid_NL,y_valid)
+
+    y_test_NL = p_utils.siaNLPredict(test_predictions,p_opt)
+    predVaf = p_utils.vaf(y_test_NL,y_test)
+
+    
+
+    ################
+    #RETURN RESULTS#
+    ################
+    print 'Printing results ...'
+    print 'p_opt ' + str(p_opt)
+    print 'valid vaf no NL: ' + str(noNLValidVaf)
+    print 'pred vaf no NL: ' + str(noNLPredVaf)
+    print 'valid vaf NL fit: ' + str(validVaf)
+    print 'pred vaf NL fit: ' + str(predVaf)
+
+    
+    print 'Printing hyperparameters ...'
+#    for opt in options:
+#        print opt.ke
+    print 'batch_size: ' +str(batch_size)
+    print 'n_kern: ' +str(n_kern)
+    print 'learning_rate: ' + str(learning_rate) 
+    print 'n_epochs: ' +str(n_epochs)
+    
+    bestModel = dict()
+    bestModel['validVaf'] = validVaf
+    bestModel['predVaf'] = predVaf
+    bestModel['noNLValidVaf'] =noNLValidVaf
+    bestModel['noNLPredVaf'] = noNLPredVaf
+    bestModel['fullModel'] = model.get_weights()
+    
+    return bestModel
+    
+def kConvLSTM(X_train,y_train,X_valid,y_valid,X_test,y_test,options):
+    from keras.layers import Dense, Dropout, Activation, Flatten
+    from keras.layers import Convolution2D, MaxPooling2D
+    from keras.models import Sequential
+    
+    model = Sequential()
+    model.add(Convolution2D(1, 10, 10, border_mode='valid', input_shape=(1, 100, 100)))
+    

@@ -1,0 +1,314 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Tue May 17 12:29:05 2016
+
+@author: phil
+"""
+
+
+import p_utils
+import theano
+import p_algorithms
+import k_algorithms
+import sys
+import os
+import numpy as np
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__),'..')))
+
+
+def runLasso(stim,resp,options=None,mode = 'user'):
+    print 'runLasso'
+    if options ==None:
+        options = dict()
+        options['lambdas'] =p_utils.userQuery('lambdas', 'list', [0], mode)
+    
+    
+    stim = p_utils.standardize(stim)
+
+    
+    X = p_utils.dataDelay(stim,375,range(1))
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    X_train = X[:estIdx,:]
+    X_reg = X[estIdx:regIdx,:]
+    X_test = X[regIdx:predIdx,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.lassoWithDelay(X_train,y_train,X_test,y_test,options)
+    
+    
+    return result
+def runSTARegression(stim,resp,options=None,mode = 'user'):
+    print 'runSTARegression'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:]
+    X_reg = X[estIdx:regIdx,:]
+    X_test = X[regIdx:predIdx,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.staRegression(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result        
+    
+def runAlphaNet(stim,resp,options=None,mode = 'user'):
+    print 'runAlphaNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:]
+    X_reg = X[estIdx:regIdx,:]
+    X_test = X[regIdx:predIdx,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.alphaNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result 
+def runAlphaConvNet(stim,resp,options=None,mode = 'user'):
+    print 'runAlphaConvNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.alphaConvNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    
+def runPPAConvNet(stim,resp,options=None,mode = 'user'):
+    print 'runPPAConvNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.PPAConvNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+
+def runConvNet(stim,resp,options=None,mode = 'user'):
+    print 'runConvNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.convNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+def runConvNetStack(stim,resp,options=None,mode = 'user'):
+    print 'runConvNetStack'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsStack(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = p_algorithms.convNetStack(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    
+def runConvLSTM(stim,resp,options=None,mode = 'user'):
+    print 'runConvLSTM'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    
+    
+    X_train = X[:estIdx,:,:]
+    X_reg = X[estIdx:regIdx,:,:]
+    X_test = X[regIdx:predIdx,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = k_algorithms.convLSTM(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    
+def runKConvNet(stim,resp,options=None,mode = 'user'):
+    print 'runKConvNet'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['N_Kern'] = p_utils.userQuery('N_Kern', 'int', 1, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['L1'] = p_utils.userQuery('L1', 'float', 0, mode)
+        options['L2'] = p_utils.userQuery('L2', 'float', 0, mode)
+        options['Filter_Size'] = p_utils.userQuery('Filter Size', 'int', 12, mode)
+        options['Pool_Size'] = p_utils.userQuery('Pool Size', 'int', 2, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+    
+    #convert to (samples,frames,rows,cols)
+    X = X.reshape(X.shape[0],X.shape[1],np.sqrt(X.shape[2]),np.sqrt(X.shape[2]))
+    
+    X_train = X[:estIdx,:,:,:]
+    X_reg = X[estIdx:regIdx,:,:,:]
+    X_test = X[regIdx:predIdx,:,:,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = k_algorithms.kConvNet(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
+    
+def runKRegression(stim,resp,options=None,mode = 'user'):
+    print 'runKRegression'
+    if options ==None:
+        options = dict()      
+        options['Batch_Size'] = p_utils.userQuery('Batch_Size', 'int', 375, mode)
+        options['Learning_Rate'] = p_utils.userQuery('Learning_Rate', 'float', 0.01, mode)
+        options['N_Epochs'] = p_utils.userQuery('N_Epochs', 'int', 500, mode)
+        options['Num_Frames'] = p_utils.userQuery('numFrames', 'int', 1, mode)
+        options['Mid_Activation_Mode'] = p_utils.userQuery('Mid Activation Mode', 'int', 0, mode)
+    stim = p_utils.standardize(stim)
+    X = p_utils.dataDelay(stim,375,range(options['Num_Frames']))
+#    X = p_utils.dataDelayAsList(X,options['Num_Frames'])
+    estIdx,regIdx,predIdx = p_utils.getEstRegPred(resp)
+
+    
+    X_train = X[:estIdx,:]
+    X_reg = X[estIdx:regIdx,:]
+    X_test = X[regIdx:predIdx,:]
+    y_train = resp[:estIdx]
+    y_reg =resp[estIdx:regIdx]
+    y_test = resp[regIdx:predIdx]
+        
+    result = k_algorithms.kRegression(X_train,y_train,X_reg,y_reg,X_test,y_test,options)
+    
+    return result
